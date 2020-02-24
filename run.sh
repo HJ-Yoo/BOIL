@@ -1,10 +1,10 @@
 #!/bin/bash
 
 python miniimagenet_train.py --data_path=/home/osilab7/hdd/mini-imagenet-jpg/ \
-                             --device=cuda:0 \
+                             --device=cuda:1 \
                              --epoch=60000 \
                              --n_way=5 \
-                             --k_spt=1 \
+                             --k_spt=5 \
                              --k_qry=15 \
                              --imgsz=84 \
                              --imgc=3 \

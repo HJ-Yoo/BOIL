@@ -9,7 +9,6 @@ class Learner(nn.Module):
     """
 
     """
-
     def __init__(self, config, imgc, imgsz):
         """
 
@@ -18,8 +17,6 @@ class Learner(nn.Module):
         :param imgsz:  28 or 84
         """
         super(Learner, self).__init__()
-
-
         self.config = config
 
         # this dict contains all tensors needed to be optimized
@@ -75,10 +72,6 @@ class Learner(nn.Module):
                 raise NotImplementedError
 
 
-
-
-
-
     def extra_repr(self):
         info = ''
 
@@ -115,8 +108,6 @@ class Learner(nn.Module):
                 raise NotImplementedError
 
         return info
-
-
 
     def forward(self, x, vars=None, bn_training=True):
         """
