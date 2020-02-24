@@ -1,11 +1,11 @@
-import  torch, os
-import  numpy as np
-from    MiniImagenet import MiniImagenet
-import  scipy.stats
-from    torch.utils.data import DataLoader
-from    torch.optim import lr_scheduler
-import  random, sys, pickle
-import  argparse
+import torch, os
+import numpy as np
+from MiniImagenet import MiniImagenet
+import scipy.stats
+from torch.utils.data import DataLoader
+from torch.optim import lr_scheduler
+import random, sys, pickle
+import argparse
 
 from meta import Meta
 
@@ -24,7 +24,7 @@ def main():
     np.random.seed(222)
 
     print(args)
-
+    
     config = [
         ('conv2d', [32, 3, 3, 3, 1, 0]),
         ('relu', [True]),
@@ -46,7 +46,7 @@ def main():
         ('linear', [args.n_way, 32 * 5 * 5])
     ]
 
-    device = torch.device('cuda')
+    device = torch.device(args.device)
     maml = Meta(args, config).to(device)
 
     tmp = filter(lambda x: x.requires_grad, maml.parameters())
@@ -55,12 +55,20 @@ def main():
     print('Total trainable tensors:', num)
 
     # batchsz here means total episode number
-    mini = MiniImagenet('/home/i/tmp/MAML-Pytorch/miniimagenet/', mode='train', n_way=args.n_way, k_shot=args.k_spt,
+    mini = MiniImagenet(root=args.data_path,
+                        mode='train',
+                        n_way=args.n_way,
+                        k_shot=args.k_spt,
                         k_query=args.k_qry,
-                        batchsz=10000, resize=args.imgsz)
-    mini_test = MiniImagenet('/home/i/tmp/MAML-Pytorch/miniimagenet/', mode='test', n_way=args.n_way, k_shot=args.k_spt,
+                        batchsz=10000,
+                        resize=args.imgsz)
+    mini_test = MiniImagenet(root=args.data_path,
+                             mode='test',
+                             n_way=args.n_way,
+                             k_shot=args.k_spt,
                              k_query=args.k_qry,
-                             batchsz=100, resize=args.imgsz)
+                             batchsz=100,
+                             resize=args.imgsz)
 
     for epoch in range(args.epoch//10000):
         # fetch meta_batchsz num of episode each time
@@ -94,6 +102,9 @@ def main():
 if __name__ == '__main__':
 
     argparser = argparse.ArgumentParser()
+    argparser.add_argument('--data_path', type=str, help='mini-imagenet data path', default='/home/osilab7/hdd/mini-imagenet-jpg/')
+    argparser.add_argument('--device', type=str, help='device', default='cuda:0')
+    
     argparser.add_argument('--epoch', type=int, help='epoch number', default=60000)
     argparser.add_argument('--n_way', type=int, help='n way', default=5)
     argparser.add_argument('--k_spt', type=int, help='k shot for support set', default=1)
