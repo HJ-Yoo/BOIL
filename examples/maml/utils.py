@@ -1,6 +1,120 @@
 import torch
 
+from model import OmniglotNet, MiniimagenetNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
+from torchmeta.datasets.helpers import omniglot, miniimagenet, tieredimagenet, cifar_fs, cub, doublemnist, triplemnist
 from collections import OrderedDict
+
+def load_dataset(args, mode):
+    folder = args.folder
+    ways = args.num_ways
+    shots = args.num_shots
+    test_shots = 15
+    download = args.download
+    shuffle = True
+    
+    if mode == 'meta_train':
+        args.meta_train = True
+        args.meta_val = False
+        args.meta_test = False
+    elif mode == 'meta_valid':
+        args.meta_train = False
+        args.meta_val = True
+        args.meta_test = False
+    elif mode == 'meta_test':
+        args.meta_train = False
+        args.meta_val = False
+        args.meta_test = True
+    
+    if args.dataset == 'omniglot':
+        dataset = omniglot(folder=folder,
+                           shots=shots,
+                           ways=ways,
+                           shuffle=shuffle,
+                           test_shots=test_shots,
+                           meta_train=args.meta_train,
+                           meta_val=args.meta_val,
+                           meta_test=args.meta_test,
+                           download=download)
+    elif args.dataset == 'miniimagenet':
+        dataset = miniimagenet(folder=folder,
+                               shots=shots,
+                               ways=ways,
+                               shuffle=shuffle,
+                               test_shots=test_shots,
+                               meta_train=args.meta_train,
+                               meta_val=args.meta_val,
+                               meta_test=args.meta_test,
+                               download=download)
+    elif args.dataset == 'tieredimagenet':
+        dataset = tieredimagenet(folder=folder,
+                                 shots=shots,
+                                 ways=ways,
+                                 shuffle=shuffle,
+                                 test_shots=test_shots,
+                                 meta_train=args.meta_train,
+                                 meta_val=args.meta_val,
+                                 meta_test=args.meta_test,
+                                 download=download)
+    elif args.dataset == 'cifar_fs':
+        dataset = cifar_fs(folder=folder,
+                           shots=shots,
+                           ways=ways,
+                           shuffle=shuffle,
+                           test_shots=test_shots,
+                           meta_train=args.meta_train,
+                           meta_val=args.meta_val,
+                           meta_test=args.meta_test,
+                           download=download)
+    elif args.dataset == 'cub':
+        dataset = cub(folder=folder,
+                      shots=shots,
+                      ways=ways,
+                      shuffle=shuffle,
+                      test_shots=test_shots,
+                      meta_train=args.meta_train,
+                      meta_val=args.meta_val,
+                      meta_test=args.meta_test,
+                      download=download)
+    elif args.dataset == 'doublemnist':
+        dataset = doublemnist(folder=folder,
+                              shots=shots,
+                              ways=ways,
+                              shuffle=shuffle,
+                              test_shots=test_shots,
+                              meta_train=args.meta_train,
+                              meta_val=args.meta_val,
+                              meta_test=args.meta_test,
+                              download=download)
+    elif args.dataset == 'triplemnist':
+        dataset = triplemnist(folder=folder,
+                              shots=shots,
+                              ways=ways,
+                              shuffle=shuffle,
+                              test_shots=test_shots,
+                              meta_train=args.meta_train,
+                              meta_val=args.meta_val,
+                              meta_test=args.meta_test,
+                              download=download)
+    
+    return dataset
+
+def load_model(args):
+    if args.dataset == 'omniglot':
+        model = OmniglotNet(1, args.num_ways, hidden_size=args.hidden_size)
+    elif args.dataset == 'miniimagenet':
+        model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size)
+    elif args.dataset == 'tieredimagenet':
+        pass
+    elif args.dataset == 'cifar_fs':
+        pass
+    elif args.dataset == 'cub':
+        pass
+    elif args.dataset == 'doublemnist':
+        pass
+    elif args.dataset == 'triplemnist':
+        pass
+    
+    return model
 
 def update_parameters(model, loss, step_size=0.5, first_order=False):
     """Update the parameters of the model, with one step of gradient descent.
@@ -21,8 +135,9 @@ def update_parameters(model, loss, step_size=0.5, first_order=False):
     params : OrderedDict
         Dictionary containing the parameters after one step of adaptation.
     """
-    grads = torch.autograd.grad(loss, model.meta_parameters(),
-        create_graph=not first_order)
+    grads = torch.autograd.grad(loss,
+                                model.meta_parameters(),
+                                create_graph=not first_order)
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
