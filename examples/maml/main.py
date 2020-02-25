@@ -95,11 +95,11 @@ if __name__ == '__main__':
     parser.add_argument('--hidden-size', type=int, default=64, help='Number of channels for each convolutional layer (default: 64).')
 
     parser.add_argument('--output-folder', type=str, default='./output/', help='Path to the output folder for saving the model (optional).')
-    parser.add_argument('--batch-size', type=int, default=16, help='Number of tasks in a mini-batch of tasks (default: 16).')
+    parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
     parser.add_argument('--batch-iter', type=int, default=1200, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 1200).')
     parser.add_argument('--train-batches', type=int, default=50, help='Number of batches the model is trained over (i.e., validation save steps) (default: 50).')
-    parser.add_argument('--valid-batches', type=int, default=1, help='Number of batches the model is validated over (default: 1).')
-    parser.add_argument('--test-batches', type=int, default=10, help='Number of batches the model is tested over (default: 10).')
+    parser.add_argument('--valid-batches', type=int, default=5, help='Number of batches the model is validated over (default: 5).')
+    parser.add_argument('--test-batches', type=int, default=5, help='Number of batches the model is tested over (default: 5).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
 
     args = parser.parse_args()
@@ -109,16 +109,20 @@ if __name__ == '__main__':
     
     model = load_model(args)
     
-    log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches,4]),
-                          columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy'])
+    log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
+                          columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
     
-    for iteration in range(args.batch_iter):
+    for iteration in tqdm(range(args.batch_iter)):
         meta_train_loss_logs, meta_train_accuracy_logs = main(args=args, mode='meta_train', iteration=iteration)
         meta_valid_loss_logs, meta_valid_accuracy_logs = main(args=args, mode='meta_valid', iteration=iteration)
         log_pd['train_error'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_loss_logs
         log_pd['train_accuracy'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_accuracy_logs
-        log_pd['valid_error'][(iteration+1)*args.train_batches-1] = meta_valid_loss_logs[0]
-        log_pd['valid_accuracy'][(iteration+1)*args.train_batches-1] = meta_valid_accuracy_logs[0]
+        log_pd['valid_error'][(iteration+1)*args.train_batches-1] = np.mean(meta_valid_loss_logs)
+        log_pd['valid_accuracy'][(iteration+1)*args.train_batches-1] = np.mean(meta_valid_accuracy_logs)
         filename = os.path.join(args.output_folder, args.dataset, 'logs', 'logs.csv')
         log_pd.to_csv(filename, index=False)
     meta_test_loss_logs, meta_test_accuracy_logs = main(args=args, mode='meta_test')
+    log_pd['test_error'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_loss_logs)
+    log_pd['test_accuracy'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_accuracy_logs)
+    filename = os.path.join(args.output_folder, args.dataset, 'logs', 'logs.csv')
+    log_pd.to_csv(filename, index=False)
