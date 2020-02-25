@@ -39,14 +39,14 @@ def train(args):
             for task_idx, (train_input, train_target, test_input,
                     test_target) in enumerate(zip(train_inputs, train_targets,
                     test_inputs, test_targets)):
-                train_logit = model(train_input)
+                train_features, train_logit = model(train_input)
                 inner_loss = F.cross_entropy(train_logit, train_target)
 
                 model.zero_grad()
                 params = update_parameters(model, inner_loss,
                     step_size=args.step_size, first_order=args.first_order)
 
-                test_logit = model(test_input, params=params)
+                test_features, test_logit = model(test_input, params=params)
                 outer_loss += F.cross_entropy(test_logit, test_target)
 
                 with torch.no_grad():
