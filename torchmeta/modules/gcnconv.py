@@ -1,4 +1,5 @@
 import torch
+import torch.nn.init as init
 import torch_geometric.nn as gnn
 
 from collections import OrderedDict
@@ -7,6 +8,12 @@ from torchmeta.modules.module import MetaModule
 class MetaGCNConv(gnn.GCNConv, MetaModule):
     __doc__ = gnn.GCNConv.__doc__
     
+#     def reset_parameters(self):
+#         init.xavier_uniform_(self.weight)
+#         init.zeros_(self.bias)
+#         self.cached_result = None
+#         self.cached_num_edges = None
+        
     def forward(self, x, edge_index, edge_weight=None, params=None):
         self.normalize = False # 일단 normalize 끄고
         

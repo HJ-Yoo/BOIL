@@ -137,8 +137,7 @@ def update_parameters(model, loss, step_size=0.5, first_order=False):
     """
     grads = torch.autograd.grad(loss,
                                 model.meta_parameters(),
-                                create_graph=not first_order,
-                                allow_unused=True) # 지워야함
+                                create_graph=not first_order)
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):

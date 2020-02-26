@@ -97,7 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('--step-size', type=float, default=0.5, help='Step-size for the gradient step for adaptation (default: 0.5).')
     parser.add_argument('--hidden-size', type=int, default=64, help='Number of channels for each convolutional layer (default: 64).')
 
-    parser.add_argument('--output-folder', type=str, default='./output/', help='Path to the output folder for saving the model (optional).')
+    parser.add_argument('--output-folder', type=str, default='./output_graph/', help='Path to the output folder for saving the model (optional).')
     parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
     parser.add_argument('--batch-iter', type=int, default=1200, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 1200).')
     parser.add_argument('--train-batches', type=int, default=50, help='Number of batches the model is trained over (i.e., validation save steps) (default: 50).')
