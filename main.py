@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from torchmeta.utils.data import BatchMetaDataLoader
-
-from utils import load_dataset, load_model, update_parameters, get_accuracy
+from maml.utils import load_dataset, load_model, update_parameters, get_accuracy
+    
 
 def main(args, mode, iteration=None):
     dataset = load_dataset(args, mode)
@@ -82,7 +82,7 @@ def main(args, mode, iteration=None):
 
 if __name__ == '__main__':
     import argparse
-
+    
     parser = argparse.ArgumentParser('Model-Agnostic Meta-Learning (MAML)')
 
     parser.add_argument('--folder', type=str, help='Path to the folder the data is downloaded to.')
