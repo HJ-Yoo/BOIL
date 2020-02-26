@@ -50,6 +50,9 @@ class MiniimagenetNet(MetaModule):
             conv3x3(hidden_size, hidden_size)
         )
         
+        # self.gcn1 = MetaGCNConv(hidden_size*5*5, hidden_size*5*5 // 2)
+        # self.gcn2 = MetaGCNConv(hidden_size*5*5 // 2, hidden_size*5*5 // 4)
+        
         self.classifier = MetaLinear(hidden_size*5*5, out_features)
 
     def forward(self, inputs, params=None):
