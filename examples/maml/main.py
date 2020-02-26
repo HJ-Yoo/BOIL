@@ -42,12 +42,15 @@ def main(args, mode, iteration=None):
             outer_loss = torch.tensor(0., device=args.device)
             accuracy = torch.tensor(0., device=args.device)
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
+                model.train()
                 support_features, support_logit = model(support_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
 
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
-
+                
+                if args.meta_val or args.meta_test:
+                    model.eval()
                 query_features, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
 
