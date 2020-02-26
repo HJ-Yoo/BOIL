@@ -1,6 +1,5 @@
+import torch
 import torch.nn as nn
-import sys
-
 from torchmeta.modules import (MetaModule, MetaSequential, MetaConv2d,
                                MetaGCNConv, MetaBatchNorm2d, MetaLinear)
 from torchmeta.modules.utils import get_subdict
@@ -50,14 +49,26 @@ class MiniimagenetNet(MetaModule):
             conv3x3(hidden_size, hidden_size)
         )
         
-        # self.gcn1 = MetaGCNConv(hidden_size*5*5, hidden_size*5*5 // 2)
+        self.gcn1 = MetaGCNConv(hidden_size*5*5, hidden_size*5*5 // 2)
         # self.gcn2 = MetaGCNConv(hidden_size*5*5 // 2, hidden_size*5*5 // 4)
         
-        self.classifier = MetaLinear(hidden_size*5*5, out_features)
+        self.classifier = MetaLinear(hidden_size*5*5 + hidden_size*5*5 // 2, out_features)
 
     def forward(self, inputs, params=None):
         features = self.features(inputs, params=get_subdict(params, 'features'))
         features = features.view((features.size(0), -1))
+        
+        edge_index = torch.tensor([[1, 2, 3], [3, 3, 4]]).cuda(1) # 2, num_edges
+        edge_weight = torch.abs(torch.rand([3, 1])).cuda(1) # num_edges, num_edge_features
+        
+        task_embedding = self.gcn1(x=features,
+                                   edge_index=edge_index,
+                                   edge_weight=edge_weight,
+                                   params=get_subdict(params, 'gcn1'))
+        
+        task_embedding = torch.mean(task_embedding, dim=0)
+        features = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
+        
         logits = self.classifier(features, params=get_subdict(params, 'classifier'))
         return features, logits
 
