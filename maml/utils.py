@@ -183,6 +183,6 @@ def graph_regularizer(features, labels=None, beta=1e-5, args=None):
                 for l in range(args.num_shots):
                     edge_matrix[(5*i)+k][(5*j)+l] = rank_centroid_matrix[i][j]
 
-    penalty = torch.sum(torch.matmul(features_dist_matrix , edge_matrix))*beta
+    penalty = torch.sum(features_dist_matrix*edge_matrix)*beta
 
     return torch.sum(penalty)

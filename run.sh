@@ -4,5 +4,5 @@ python ./main.py --folder=./dataset \
                  --dataset=miniimagenet \
                  --device=cuda:0 \
                  --download \
-		 --model-name=gcn_test 
+		         --save-name=graph_regularizer 
 echo "finished"

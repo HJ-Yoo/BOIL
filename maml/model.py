@@ -51,25 +51,25 @@ class MiniimagenetNet(MetaModule):
         
         self.pool = nn.AdaptiveAvgPool2d(1)
         
-        # self.gcn1 = MetaGCNConv(hidden_size*5*5, hidden_size*5*5 // 2)
+        self.gcn1 = MetaGCNConv(hidden_size, hidden_size // 2)
         # self.gcn2 = MetaGCNConv(hidden_size*5*5 // 2, hidden_size*5*5 // 4)
         
-        self.classifier = MetaLinear(hidden_size, out_features)
+        self.classifier = MetaLinear(hidden_size + hidden_size // 2, out_features)
 
     def forward(self, inputs, params=None):
         features = self.features(inputs, params=get_subdict(params, 'features'))
         features = self.pool(features)
         features = features.view((features.size(0), -1))        
-#         edge_index, edge_weight = get_graph_inputs(features)
+        edge_index, edge_weight = get_graph_inputs(features)
         
-#         task_embedding = self.gcn1(x=features,
-#                                    edge_index=edge_index,
-#                                    edge_weight=edge_weight,
-#                                    params=get_subdict(params, 'gcn1'))
+        task_embedding = self.gcn1(x=features,
+                                   edge_index=edge_index,
+                                   edge_weight=edge_weight,
+                                   params=get_subdict(params, 'gcn1'))
         
-#         task_embedding = torch.mean(task_embedding, dim=0)
+        task_embedding = torch.mean(task_embedding, dim=0)
 #         task_embedding = torch.mean(features, dim=0)
-#         features = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
+        features = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
         
         logits = self.classifier(features, params=get_subdict(params, 'classifier'))
         return features, logits
@@ -87,4 +87,4 @@ def get_graph_inputs(features, gamma=0.001):
     self_idx = [(e * edge_num) + e for e in range(edge_num)]
     edge_weight[self_idx,] = 1
     
-    return edge_index.to(features.device), edge_weight.detach().to(feature.device)
+    return edge_index.to(features.device), edge_weight.detach().to(features.device)
