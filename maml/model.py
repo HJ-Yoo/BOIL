@@ -43,18 +43,19 @@ class MiniimagenetNet(MetaModule):
         self.hidden_size = hidden_size
 
         self.features = MetaSequential(
-            conv3x3(in_channels, hidden_size),
-            conv3x3(hidden_size, hidden_size),
-            conv3x3(hidden_size, hidden_size),
-            conv3x3(hidden_size, hidden_size)
+            conv3x3(in_channels, 64),
+            conv3x3(64, 64),
+            conv3x3(64, 64),
+            conv3x3(64, 64)
         )
         
         self.pool = nn.AdaptiveAvgPool2d(1)
         
-        self.gcn1 = MetaGCNConv(hidden_size, hidden_size // 2)
-        # self.gcn2 = MetaGCNConv(hidden_size*5*5 // 2, hidden_size*5*5 // 4)
+        self.gcn1 = MetaGCNConv(64, 64 // 2)
+        self.gcn1_act = nn.ReLU()
+        self.gcn2 = MetaGCNConv(64 // 2, 64 // 4)
         
-        self.classifier = MetaLinear(hidden_size + hidden_size // 2, out_features)
+        self.classifier = MetaLinear(64 + 64 // 4, out_features)
 
     def forward(self, inputs, params=None):
         features = self.features(inputs, params=get_subdict(params, 'features'))
@@ -62,10 +63,17 @@ class MiniimagenetNet(MetaModule):
         features = features.view((features.size(0), -1))        
         edge_index, edge_weight = get_graph_inputs(features)
         
-        task_embedding = self.gcn1(x=features,
+        task_embedding = self.gcn1_act(self.gcn1(x=features,
+                                                 edge_index=edge_index,
+                                                 edge_weight=edge_weight,
+                                                 params=get_subdict(params, 'gcn1')))
+        
+        # edge_index, edge_weight = get_graph_inputs(task_embedding)
+        
+        task_embedding = self.gcn2(x=task_embedding,
                                    edge_index=edge_index,
                                    edge_weight=edge_weight,
-                                   params=get_subdict(params, 'gcn1'))
+                                   params=get_subdict(params, 'gcn2'))        
         
         task_embedding = torch.mean(task_embedding, dim=0)
         # task_embedding = torch.mean(features, dim=0)

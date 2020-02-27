@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 import pandas as pd
 import torch
@@ -6,8 +7,8 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from torchmeta.utils.data import BatchMetaDataLoader
-from maml.utils import load_dataset, load_model, update_parameters, get_accuracy
-    
+from maml.utils import (load_dataset, load_model, load_pretrained_model, load_best_valid_model,
+                        update_parameters, get_accuracy)
 
 def main(args, mode, iteration=None):
     dataset = load_dataset(args, mode)
@@ -107,33 +108,30 @@ if __name__ == '__main__':
     parser.add_argument('--test-batches', type=int, default=250, help='Number of batches the model is tested over (default: 250).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
     
+    parser.add_argument('--init', action='store_true', help='Initialization with pre-trained model.')
+    parser.add_argument('--pretrain-epochs', type=int, default=20, help='Number of epochs for training pretrained model.')
     parser.add_argument('--best-valid-error-test', action='store_true', help='Test using the best valid error model')
     parser.add_argument('--best-valid-accuracy-test', action='store_true', help='Test using the best valid accuracy model')
 
     args = parser.parse_args()
-    args.device = torch.device(args.device)    
+    args.device = torch.device(args.device)
+    os.makedirs(os.path.join(args.output_folder, 'pretrained'), exist_ok=True)
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs'), exist_ok=True)
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models'), exist_ok=True)
     
-    model = load_model(args)
+    model = load_model(args, maml=True)
     
-    if args.best_valid_error_test or args.best_valid_accuracy_test:
-        filename = './output/miniimagenet_{}/logs/logs.csv'.format(args.save_name)
-        logs = pd.read_csv(filename)
+    if args.init:
+        pretrained_model_dict = load_pretrained_model(args)
+        # model.classifier.weight.data = pretrained_model_dict['classifier.weight'][random.sample(range(64), 5),:]
+        # u, _, _ = torch.svd(torch.t(pretrained_model_dict['classifier.weight']))
+        # model.classifier.weight = torch.nn.Parameter(torch.cat([torch.mean(torch.t(u)[:5, :], dim=0, keepdims=True)] * args.num_ways, dim=0))
+        # model.classifier.weight.data += 0.01 * torch.randn(model.classifier.weight.shape)
+        load_layer_name = ['features', 'gcn1', 'gcn2']
+        pretrained_model_dict = {k: v for k, v in pretrained_model_dict.items() if k.split(".")[0] in load_layer_name}
+        model.load_state_dict(pretrained_model_dict, strict=False)
         
-        if args.best_valid_error_test:
-            valid_logs = list(logs[logs['valid_error']!=0]['valid_error'])
-            best_valid_epochs = (valid_logs.index(min(valid_logs))+1)*50
-        else:
-            valid_logs = list(logs[logs['valid_accuracy']!=0]['valid_accuracy'])
-            best_valid_epochs = (valid_logs.index(max(valid_logs))+1)*50
-            
-        best_valid_model = torch.load('./output/miniimagenet_{}/models/epochs_{}.pt'.format(args.save_name, best_valid_epochs))
-        model.load_state_dict(best_valid_model)
-        
-        meta_test_loss_logs, meta_test_accuracy_logs = main(args=args, mode='meta_test')
-        print ('loss: {}, accuracy: {}'.format(np.mean(meta_test_loss_logs), np.mean(meta_test_accuracy_logs)))
-    else:
+    if not args.best_valid_error_test and not args.best_valid_accuracy_test:
         log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                               columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
 
@@ -151,3 +149,8 @@ if __name__ == '__main__':
         log_pd['test_accuracy'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_accuracy_logs)
         filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'logs.csv')
         log_pd.to_csv(filename, index=False)
+    else:
+        best_valid_model = load_best_valid_model(args)
+        model.load_state_dict(best_valid_model)
+        meta_test_loss_logs, meta_test_accuracy_logs = main(args=args, mode='meta_test')
+        print ('test loss: {}, test accuracy: {}'.format(np.mean(meta_test_loss_logs), np.mean(meta_test_accuracy_logs)))
