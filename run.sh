@@ -2,6 +2,7 @@
 
 python ./main.py --folder=./dataset \
                  --dataset=miniimagenet \
-                 --device=cuda:1 \
-                 --download
+                 --device=cuda:0 \
+                 --download \
+		 --model-name=gcn_test 
 echo "finished"
