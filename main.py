@@ -6,9 +6,8 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from torchmeta.utils.data import BatchMetaDataLoader
-from maml.utils import load_dataset, load_model, update_parameters, get_accuracy
+from maml.utils import load_dataset, load_model, update_parameters, get_accuracy, graph_regularizer
     
-
 def main(args, mode, iteration=None):
     dataset = load_dataset(args, mode)
     dataloader = BatchMetaDataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
@@ -44,7 +43,9 @@ def main(args, mode, iteration=None):
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 model.train()
                 support_features, support_logit = model(support_input)
-                inner_loss = F.cross_entropy(support_logit, support_target)
+                graph_penalty = graph_regularizer(features=support_features, labels=support_target, args=args)
+                maml_loss = F.cross_entropy(support_logit, support_target)
+                inner_loss = maml_loss + graph_penalty
 
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
@@ -73,7 +74,7 @@ def main(args, mode, iteration=None):
 
     # Save model
     if args.meta_train:
-        filename = os.path.join(args.output_folder, args.dataset+'_'+args.model_name, 'models', 'epochs_{}.pt'.format((iteration+1)*total))
+        filename = os.path.join(args.output_folder, args.dataset, 'models', 'epochs_{}.pt'.format((iteration+1)*total))
         with open(filename, 'wb') as f:
             state_dict = model.state_dict()
             torch.save(state_dict, f)
@@ -97,8 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('--step-size', type=float, default=0.5, help='Step-size for the gradient step for adaptation (default: 0.5).')
     parser.add_argument('--hidden-size', type=int, default=64, help='Number of channels for each convolutional layer (default: 64).')
 
-    parser.add_argument('--output-folder', type=str, default='./output/', help='Path to the output folder for saving the model (optional).')
-    parser.add_argument('--model-name', type=str, default=None, help='Name of model (optional).')
+    parser.add_argument('--output-folder', type=str, default='./output_graph/', help='Path to the output folder for saving the model (optional).')
     parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
     parser.add_argument('--batch-iter', type=int, default=1200, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 1200).')
     parser.add_argument('--train-batches', type=int, default=50, help='Number of batches the model is trained over (i.e., validation save steps) (default: 50).')
@@ -108,8 +108,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     args.device = torch.device(args.device)    
-    os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.model_name, 'logs'), exist_ok=True)
-    os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.model_name, 'models'), exist_ok=True)
+    os.makedirs(os.path.join(args.output_folder, args.dataset, 'logs'), exist_ok=True)
+    os.makedirs(os.path.join(args.output_folder, args.dataset, 'models'), exist_ok=True)
     
     model = load_model(args)
     
@@ -123,10 +123,10 @@ if __name__ == '__main__':
         log_pd['train_accuracy'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_accuracy_logs
         log_pd['valid_error'][(iteration+1)*args.train_batches-1] = np.mean(meta_valid_loss_logs)
         log_pd['valid_accuracy'][(iteration+1)*args.train_batches-1] = np.mean(meta_valid_accuracy_logs)
-        filename = os.path.join(args.output_folder, args.dataset+'_'+args.model_name, 'logs', 'logs.csv')
+        filename = os.path.join(args.output_folder, args.dataset, 'logs', 'logs.csv')
         log_pd.to_csv(filename, index=False)
     meta_test_loss_logs, meta_test_accuracy_logs = main(args=args, mode='meta_test')
     log_pd['test_error'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_loss_logs)
     log_pd['test_accuracy'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_accuracy_logs)
-    filename = os.path.join(args.output_folder, args.dataset+'_'+args.model_name, 'logs', 'logs.csv')
+    filename = os.path.join(args.output_folder, args.dataset, 'logs', 'logs.csv')
     log_pd.to_csv(filename, index=False)
