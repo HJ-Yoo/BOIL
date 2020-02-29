@@ -38,14 +38,15 @@ def main(args, mode, iteration=None):
             query_inputs = query_inputs.to(device=args.device)
             query_targets = query_targets.to(device=args.device)
 
-            outer_loss = torch.tensor(0., device=args.device)
+            outer_maml_loss = torch.tensor(0., device=args.device)
+            query_graph_penalty = torch.tensor(0., device=args.device)
             accuracy = torch.tensor(0., device=args.device)
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 model.train()
                 support_features, support_logit = model(support_input)
-                maml_loss = F.cross_entropy(support_logit, support_target)
-                graph_penalty = graph_regularizer(features=support_features, labels=support_target, args=args)
-                inner_loss = maml_loss + graph_penalty
+                inner_maml_loss = F.cross_entropy(support_logit, support_target)
+                support_graph_penalty = graph_regularizer(features=support_features, labels=support_target, args=args)
+                inner_loss = inner_maml_loss + support_graph_penalty
 
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
@@ -53,7 +54,9 @@ def main(args, mode, iteration=None):
                 if args.meta_val or args.meta_test:
                     model.eval()
                 query_features, query_logit = model(query_input, params=params)
-                outer_loss += F.cross_entropy(query_logit, query_target)
+                outer_maml_loss += F.cross_entropy(query_logit, query_target)
+                query_graph_penalty += graph_regularizer(features=query_features, labels=query_target, args=args)
+                outer_loss = outer_maml_loss + query_graph_penalty
 
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
@@ -78,7 +81,7 @@ def main(args, mode, iteration=None):
         with open(filename, 'wb') as f:
             state_dict = model.state_dict()
             torch.save(state_dict, f)
-    
+   
     return loss_logs, accuracy_logs
 
 if __name__ == '__main__':
@@ -95,7 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('--meta-lr', type=float, default=1e-3, help='Learning rate of meta optimizer.')
 
     parser.add_argument('--first-order', action='store_true', help='Use the first-order approximation of MAML.')
-    parser.add_argument('--step-size', type=float, default=0.5, help='Step-size for the gradient step for adaptation (default: 0.5).')
+    parser.add_argument('--step-size', type=float, default=0.7, help='Step-size for the gradient step for adaptation (default: 0.5).')
     parser.add_argument('--hidden-size', type=int, default=64, help='Number of channels for each convolutional layer (default: 64).')
 
     parser.add_argument('--output-folder', type=str, default='./output/', help='Path to the output folder for saving the model (optional).')
@@ -103,9 +106,15 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
     parser.add_argument('--batch-iter', type=int, default=1200, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 1200).')
     parser.add_argument('--train-batches', type=int, default=50, help='Number of batches the model is trained over (i.e., validation save steps) (default: 50).')
-    parser.add_argument('--valid-batches', type=int, default=5, help='Number of batches the model is validated over (default: 5).')
-    parser.add_argument('--test-batches', type=int, default=5, help='Number of batches the model is tested over (default: 5).')
+    parser.add_argument('--valid-batches', type=int, default=25, help='Number of batches the model is validated over (default: 5).')
+    parser.add_argument('--test-batches', type=int, default=250, help='Number of batches the model is tested over (default: 5).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
+    
+    parser.add_argument('--grapn_gamma', type=int, default=4.9, help='classwise difference magnitude in making graph edges')
+    parser.add_argument('--grapn_beta', type=int, default=1e-5, help='hyperparameter for graph regularizer')
+    
+    parser.add_argument('--best-valid-error-test', action='store_true', help='Test using the best valid error model')
+    parser.add_argument('--best-valid-accuracy-test', action='store_true', help='Test using the best valid accuracy model')
 
     args = parser.parse_args()
     args.device = torch.device(args.device)    
@@ -117,17 +126,40 @@ if __name__ == '__main__':
     log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                           columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
     
-    for iteration in tqdm(range(args.batch_iter)):
-        meta_train_loss_logs, meta_train_accuracy_logs = main(args=args, mode='meta_train', iteration=iteration)
-        meta_valid_loss_logs, meta_valid_accuracy_logs = main(args=args, mode='meta_valid', iteration=iteration)
-        log_pd['train_error'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_loss_logs
-        log_pd['train_accuracy'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_accuracy_logs
-        log_pd['valid_error'][(iteration+1)*args.train_batches-1] = np.mean(meta_valid_loss_logs)
-        log_pd['valid_accuracy'][(iteration+1)*args.train_batches-1] = np.mean(meta_valid_accuracy_logs)
+    
+    if args.best_valid_error_test or args.best_valid_accuracy_test:
+        filename = './output/miniimagenet_{}/logs/logs.csv'.format(args.save_name)
+        logs = pd.read_csv(filename)
+
+        if args.best_valid_error_test:
+            valid_logs = list(logs[logs['valid_error']!=0]['valid_error'])
+            best_valid_epochs = (valid_logs.index(min(valid_logs))+1)*50
+        else:
+            valid_logs = list(logs[logs['valid_accuracy']!=0]['valid_accuracy'])
+            best_valid_epochs = (valid_logs.index(max(valid_logs))+1)*50
+
+        best_valid_model = torch.load('./output/miniimagenet_{}/models/epochs_{}.pt'.format(args.save_name, best_valid_epochs))
+        model.load_state_dict(best_valid_model)
+
+        meta_test_loss_logs, meta_test_accuracy_logs = main(args=args, mode='meta_test')
+        print ('loss: {}, accuracy: {}'.format(np.mean(meta_test_loss_logs), np.mean(meta_test_accuracy_logs)))
+    else:
+        log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
+                              columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
+        
+        
+        for iteration in tqdm(range(args.batch_iter)):
+            meta_train_loss_logs, meta_train_accuracy_logs = main(args=args, mode='meta_train', iteration=iteration)
+            meta_valid_loss_logs, meta_valid_accuracy_logs = main(args=args, mode='meta_valid', iteration=iteration)
+            log_pd['train_error'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_loss_logs
+            log_pd['train_accuracy'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_accuracy_logs
+            log_pd['valid_error'][(iteration+1)*args.train_batches-1] = np.mean(meta_valid_loss_logs)
+            log_pd['valid_accuracy'][(iteration+1)*args.train_batches-1] = np.mean(meta_valid_accuracy_logs)
+            filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'logs.csv')
+            log_pd.to_csv(filename, index=False)
+        meta_test_loss_logs, meta_test_accuracy_logs = main(args=args, mode='meta_test')
+        log_pd['test_error'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_loss_logs)
+        log_pd['test_accuracy'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_accuracy_logs)
         filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'logs.csv')
-        log_pd.to_csv(filename, index=False)
-    meta_test_loss_logs, meta_test_accuracy_logs = main(args=args, mode='meta_test')
-    log_pd['test_error'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_loss_logs)
-    log_pd['test_accuracy'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_accuracy_logs)
-    filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'logs.csv')
-    log_pd.to_csv(filename, index=False)
+        log_pd.to_csv(filename, index=False) 
+

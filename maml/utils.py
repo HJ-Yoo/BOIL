@@ -165,7 +165,7 @@ def get_accuracy(logits, targets):
     _, predictions = torch.max(logits, dim=-1)
     return torch.mean(predictions.eq(targets).float())
 
-def graph_regularizer(features, labels=None, beta=1e-5, args=None):
+def graph_regularizer(features, labels=None, args=None):
     features_dist_matrix = torch.cdist(features, features).detach()
     centroid = torch.zeros([5, features.shape[1]])
     
@@ -173,16 +173,15 @@ def graph_regularizer(features, labels=None, beta=1e-5, args=None):
         centroid[i] = torch.mean(features[torch.where(labels==i)[0],:], dim=0)
 
     centroid_dist_matrix = torch.cdist(centroid, centroid).detach()
-    rank_centroid_matrix = 1 - centroid_dist_matrix / torch.sum(torch.unique(centroid_dist_matrix))
-
+    rank_centroid_matrix = 1 - (centroid_dist_matrix / torch.sum(torch.unique(centroid_dist_matrix))) * args.graph_gamma # gamma=1.0 일때, 0.85 ~ 1.0 
+    
     edge_matrix = torch.zeros(features_dist_matrix.shape).to(args.device)
-
     for i in range(args.num_ways):
         for j in range(args.num_ways):
             for k in range(args.num_shots):
                 for l in range(args.num_shots):
                     edge_matrix[(5*i)+k][(5*j)+l] = rank_centroid_matrix[i][j]
-
-    penalty = torch.sum(features_dist_matrix*edge_matrix)*beta
-
+    
+    penalty = torch.sum(features_dist_matrix*edge_matrix)*args.graph_beta
+    
     return torch.sum(penalty)

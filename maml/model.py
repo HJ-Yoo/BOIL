@@ -36,41 +36,43 @@ class OmniglotNet(MetaModule):
         return features, logits
 
 class MiniimagenetNet(MetaModule):
-    def __init__(self, in_channels, out_features, hidden_size=64):
+    def __init__(self, in_channels, out_features, hidden_size=32):
         super(MiniimagenetNet, self).__init__()
         self.in_channels = in_channels
         self.out_features = out_features
         self.hidden_size = hidden_size
 
         self.features = MetaSequential(
-            conv3x3(in_channels, hidden_size),
-            conv3x3(hidden_size, hidden_size),
-            conv3x3(hidden_size, hidden_size),
-            conv3x3(hidden_size, hidden_size)
+            conv3x3(in_channels, 64),
+            conv3x3(64, 128),
+            conv3x3(128, 256),
+            conv3x3(256, 512)
         )
         
         self.pool = nn.AdaptiveAvgPool2d(1)
         
-        self.gcn1 = MetaGCNConv(hidden_size, hidden_size // 2)
-        # self.gcn2 = MetaGCNConv(hidden_size*5*5 // 2, hidden_size*5*5 // 4)
+#         self.gcn1 = MetaGCNConv(256, 256 // 2)
+#         self.gcn2 = MetaGCNConv(hidden_size*5*5 // 2, hidden_size*5*5 // 4)
         
-        self.classifier = MetaLinear(hidden_size + hidden_size // 2, out_features)
-
+#         self.classifier = MetaLinear(256 + 256 // 2, out_features)
+        self.classifier = MetaLinear(512, out_features)
+        
     def forward(self, inputs, params=None):
         features = self.features(inputs, params=get_subdict(params, 'features'))
         features = self.pool(features)
         features = features.view((features.size(0), -1))        
-        edge_index, edge_weight = get_graph_inputs(features)
+#         edge_index, edge_weight = get_graph_inputs(features)
         
-        task_embedding = self.gcn1(x=features,
-                                   edge_index=edge_index,
-                                   edge_weight=edge_weight,
-                                   params=get_subdict(params, 'gcn1'))
+#         task_embedding = self.gcn1(x=features,
+#                                  edge_index=edge_index,
+#                                  edge_weight=edge_weight,
+#                                  params=get_subdict(params, 'gcn1'))
         
-        task_embedding = torch.mean(task_embedding, dim=0)
+#         task_embedding = torch.mean(task_embedding, dim=0)
 #         task_embedding = torch.mean(features, dim=0)
-        features = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
+#         features_cat = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
         
+#         logits = self.classifier(features_cat, params=get_subdict(params, 'classifier'))
         logits = self.classifier(features, params=get_subdict(params, 'classifier'))
         return features, logits
     
