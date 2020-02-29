@@ -38,7 +38,7 @@ def main(args, mode, iteration=None):
             query_inputs = query_inputs.to(device=args.device)
             query_targets = query_targets.to(device=args.device)
 
-            outer_maml_loss = torch.tensor(0., device=args.device)
+            outer_loss = torch.tensor(0., device=args.device)
             query_graph_penalty = torch.tensor(0., device=args.device)
             accuracy = torch.tensor(0., device=args.device)
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
@@ -54,9 +54,9 @@ def main(args, mode, iteration=None):
                 if args.meta_val or args.meta_test:
                     model.eval()
                 query_features, query_logit = model(query_input, params=params)
-                outer_maml_loss += F.cross_entropy(query_logit, query_target)
-                query_graph_penalty += graph_regularizer(features=query_features, labels=query_target, args=args)
-                outer_loss = outer_maml_loss + query_graph_penalty
+                outer_loss += F.cross_entropy(query_logit, query_target)
+#                 query_graph_penalty += graph_regularizer(features=query_features, labels=query_target, args=args)
+#                 outer_loss = outer_maml_loss + query_graph_penalty
 
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
@@ -110,8 +110,8 @@ if __name__ == '__main__':
     parser.add_argument('--test-batches', type=int, default=250, help='Number of batches the model is tested over (default: 5).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
     
-    parser.add_argument('--graph_gamma', type=int, default=4.9, help='classwise difference magnitude in making graph edges')
-    parser.add_argument('--graph_beta', type=int, default=1e-5, help='hyperparameter for graph regularizer')
+    parser.add_argument('--graph-gamma', type=float, default=5.0, help='classwise difference magnitude in making graph edges')
+    parser.add_argument('--graph-beta', type=float, default=1e-5, help='hyperparameter for graph regularizer')
     
     parser.add_argument('--best-valid-error-test', action='store_true', help='Test using the best valid error model')
     parser.add_argument('--best-valid-accuracy-test', action='store_true', help='Test using the best valid accuracy model')
