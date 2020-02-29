@@ -110,7 +110,7 @@ if __name__ == '__main__':
     parser.add_argument('--test-batches', type=int, default=250, help='Number of batches the model is tested over (default: 5).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
     
-    parser.add_argument('--grapn_gamma', type=int, default=4.9, help='classwise difference magnitude in making graph edges')
+    parser.add_argument('--graph_gamma', type=int, default=4.9, help='classwise difference magnitude in making graph edges')
     parser.add_argument('--grapn_beta', type=int, default=1e-5, help='hyperparameter for graph regularizer')
     
     parser.add_argument('--best-valid-error-test', action='store_true', help='Test using the best valid error model')
