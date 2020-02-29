@@ -44,23 +44,21 @@ class MiniimagenetNet(MetaModule):
 
         self.features = MetaSequential(
             conv3x3(in_channels, 64),
-            conv3x3(64, 128),
-            conv3x3(128, 256),
-            conv3x3(256, 512)
+            conv3x3(64, 64),
+            conv3x3(64, 64),
+            conv3x3(64, 64)
         )
-        
-        self.pool = nn.AdaptiveAvgPool2d(1)
         
 #         self.gcn1 = MetaGCNConv(256, 256 // 2)
 #         self.gcn2 = MetaGCNConv(hidden_size*5*5 // 2, hidden_size*5*5 // 4)
         
 #         self.classifier = MetaLinear(256 + 256 // 2, out_features)
-        self.classifier = MetaLinear(512, out_features)
+        self.classifier = MetaLinear(64*5*5, out_features)
         
     def forward(self, inputs, params=None):
         features = self.features(inputs, params=get_subdict(params, 'features'))
-        features = self.pool(features)
-        features = features.view((features.size(0), -1))        
+        features = features.view((features.size(0), -1))   
+        
 #         edge_index, edge_weight = get_graph_inputs(features)
         
 #         task_embedding = self.gcn1(x=features,
@@ -69,13 +67,12 @@ class MiniimagenetNet(MetaModule):
 #                                  params=get_subdict(params, 'gcn1'))
         
 #         task_embedding = torch.mean(task_embedding, dim=0)
-#         task_embedding = torch.mean(features, dim=0)
+#         task_embedding = torch.mean(features, dim=0) # for comparison with averaging
 #         features_cat = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
-        
 #         logits = self.classifier(features_cat, params=get_subdict(params, 'classifier'))
+
         logits = self.classifier(features, params=get_subdict(params, 'classifier'))
         return features, logits
-    
 
 def get_graph_inputs(features, gamma=0.001):
     euclidean_matrix = torch.cdist(features, features)
