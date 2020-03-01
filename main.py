@@ -128,6 +128,7 @@ if __name__ == '__main__':
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
     parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
     parser.add_argument('--task-embedding-method', type=str, default=None, help='task embedding method')
+    parser.add_argument('--edge-generation-method', type=str, default=None, help='edge generation method')
     
     parser.add_argument('--best-valid-error-test', action='store_true', help='Test using the best valid error model')
     parser.add_argument('--best-valid-accuracy-test', action='store_true', help='Test using the best valid accuracy model')

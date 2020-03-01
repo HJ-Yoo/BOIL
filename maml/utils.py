@@ -102,7 +102,7 @@ def load_model(args):
     if args.dataset == 'omniglot':
         model = OmniglotNet(1, args.num_ways, hidden_size=args.hidden_size)
     elif args.dataset == 'miniimagenet':
-        model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size, task_embedding_method=args.task_embedding_method)
+        model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size, task_embedding_method=args.task_embedding_method, edge_generation_method=args.edge_generation_method)
     elif args.dataset == 'tieredimagenet':
         pass
     elif args.dataset == 'cifar_fs':
