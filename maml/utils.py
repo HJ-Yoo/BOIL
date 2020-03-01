@@ -1,14 +1,8 @@
-import os
 import torch
-import torch.nn.functional as F
-import numpy as np
-import pandas as pd
-from tqdm import tqdm
-from collections import OrderedDict
-from torch.utils.data import DataLoader
 
 from maml.model import OmniglotNet, MiniimagenetNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
 from torchmeta.datasets.helpers import omniglot, miniimagenet, tieredimagenet, cifar_fs, cub, doublemnist, triplemnist
+from collections import OrderedDict
 
 def load_dataset(args, mode):
     folder = args.folder
@@ -104,11 +98,11 @@ def load_dataset(args, mode):
     
     return dataset
 
-def load_model(args, maml=True):
+def load_model(args):
     if args.dataset == 'omniglot':
         model = OmniglotNet(1, args.num_ways, hidden_size=args.hidden_size)
     elif args.dataset == 'miniimagenet':
-        model = MiniimagenetNet(3, args.num_ways if maml else 64, hidden_size=args.hidden_size)
+        model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size)
     elif args.dataset == 'tieredimagenet':
         pass
     elif args.dataset == 'cifar_fs':
@@ -121,53 +115,6 @@ def load_model(args, maml=True):
         pass
     
     return model
-
-def load_pretrained_model(args):
-    pretrained_model = load_model(args, maml=False)
-    pretrained_model_filename = os.path.join(args.output_folder, 'pretrained', '{}.pt'.format(args.save_name))
-
-    if not os.path.exists(pretrained_model_filename):
-        num_classes = 64
-        pretrained_model.to(device=args.device)
-        pretrained_model.train()
-        pretrained_model_optimizer = torch.optim.Adam(pretrained_model.parameters(), lr=0.01)
-
-        dataset = load_dataset(args, 'meta_train')
-        data = torch.cat([torch.from_numpy(np.array(dataset.dataset.__getitem__(i).data))/255. for i in range(num_classes)], dim=0).permute(0, 3, 1, 2).float()
-        labels = torch.tensor(sum([[i]*600 for i in range(num_classes)], []))
-
-        dataloader = DataLoader(dataset=list(zip(data,labels)), batch_size=128, shuffle=True)
-        for _ in tqdm(range(args.pretrain_epochs)):
-            for input, target in dataloader:
-                input = input.type(torch.FloatTensor).to(device=args.device)
-                target = target.type(torch.LongTensor).to(device=args.device)
-
-                features, logit = pretrained_model(input)
-                loss = F.cross_entropy(logit, target)
-
-                pretrained_model_optimizer.zero_grad()
-                loss.backward()
-                pretrained_model_optimizer.step()
-
-        with open(pretrained_model_filename, 'wb') as f:
-            state_dict = pretrained_model.state_dict()
-            torch.save(state_dict, f)
-
-    # Load pretrained model
-    pretrained_model.load_state_dict(torch.load(pretrained_model_filename), strict=True)
-    return pretrained_model.state_dict()
-
-def load_best_valid_model(args):
-    filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'logs.csv')
-    logs = pd.read_csv(filename)
-    if args.best_valid_error_test:
-        valid_logs = list(logs[logs['valid_error']!=0]['valid_error'])
-        best_valid_epoch = (valid_logs.index(min(valid_logs))+1)*50
-    else:
-        valid_logs = list(logs[logs['valid_accuracy']!=0]['valid_accuracy'])
-        best_valid_epoch = (valid_logs.index(max(valid_logs))+1)*50
-        
-    return torch.load('./output/miniimagenet_{}/models/epochs_{}.pt'.format(args.save_name, best_valid_epoch))
 
 def update_parameters(model, loss, step_size=0.5, first_order=False):
     """Update the parameters of the model, with one step of gradient descent.
@@ -226,15 +173,16 @@ def graph_regularizer(features, labels=None, args=None):
         centroid[i] = torch.mean(features[torch.where(labels==i)[0],:], dim=0)
 
     centroid_dist_matrix = torch.cdist(centroid, centroid).detach()
-    rank_centroid_matrix = 1 - (centroid_dist_matrix / torch.sum(torch.unique(centroid_dist_matrix))) * args.graph_gamma # gamma=1.0 일때, 0.85 ~ 1.0 
-    
+    rank_centroid_matrix = 1 - (centroid_dist_matrix / torch.sum(torch.unique(centroid_dist_matrix))) * args.graph_gamma
+
     edge_matrix = torch.zeros(features_dist_matrix.shape).to(args.device)
+
     for i in range(args.num_ways):
         for j in range(args.num_ways):
             for k in range(args.num_shots):
                 for l in range(args.num_shots):
                     edge_matrix[(5*i)+k][(5*j)+l] = rank_centroid_matrix[i][j]
-    
+
     penalty = torch.sum(features_dist_matrix*edge_matrix)*args.graph_beta
-    
+
     return torch.sum(penalty)
