@@ -102,7 +102,7 @@ def load_model(args):
     if args.dataset == 'omniglot':
         model = OmniglotNet(1, args.num_ways, hidden_size=args.hidden_size)
     elif args.dataset == 'miniimagenet':
-        model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size)
+        model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size, task_embedding_method=args.task_embedding_method)
     elif args.dataset == 'tieredimagenet':
         pass
     elif args.dataset == 'cifar_fs':
@@ -165,7 +165,7 @@ def get_accuracy(logits, targets):
     _, predictions = torch.max(logits, dim=-1)
     return torch.mean(predictions.eq(targets).float())
 
-def graph_regularizer(features, labels=None, args=None):
+def get_graph_regularizer(features, labels=None, args=None):
     features_dist_matrix = torch.cdist(features, features).detach()
     centroid = torch.zeros([5, features.shape[1]])
     

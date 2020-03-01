@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from torchmeta.utils.data import BatchMetaDataLoader
-from maml.utils import load_dataset, load_model, update_parameters, get_accuracy, graph_regularizer
+from maml.utils import load_dataset, load_model, update_parameters, get_accuracy, get_graph_regularizer
     
 def main(args, mode, iteration=None):
     dataset = load_dataset(args, mode)
@@ -39,18 +39,22 @@ def main(args, mode, iteration=None):
             query_targets = query_targets.to(device=args.device)
 
             outer_loss = torch.tensor(0., device=args.device)
-            outer_fc_regularizer = torch.tensor(0., device=args.device)
             accuracy = torch.tensor(0., device=args.device)
+            
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 model.train()
                 support_features, support_logit = model(support_input)
-                maml_loss = F.cross_entropy(support_logit, support_target)
-#                 graph_penalty = graph_regularizer(features=support_features, labels=support_target, args=args)
-#                 fc_regularizer = torch.tensor(0., device=args.device)
-#                 for i in range(4):
-#                     for j in range(i+1, 5):
-#                         fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])
-                inner_loss = maml_loss # + fc_regularizer # + graph_penalty
+                inner_loss = F.cross_entropy(support_logit, support_target)
+                
+                if args.graph_regularizer:
+                    graph_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
+                    inner_loss += graph_regularizer
+                if args.fc_regularizer:
+                    fc_regularizer = torch.tensor(0., device=args.device)
+                    for i in range(4):
+                        for j in range(i+1, 5):
+                            fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])
+                    inner_loss += fc_regularizer
 
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
@@ -58,11 +62,13 @@ def main(args, mode, iteration=None):
                 if args.meta_val or args.meta_test:
                     model.eval()
                 query_features, query_logit = model(query_input, params=params)
-#                 for i in range(4):
-#                     for j in range(i+1, 5):
-#                         outer_fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])
-#                 print(F.cross_entropy(query_logit, query_target), outer_fc_regularizer)
-                outer_loss += F.cross_entropy(query_logit, query_target) # + outer_fc_regularizer)
+                outer_loss += F.cross_entropy(query_logit, query_target)
+                if args.fc_regularizer:
+                    outer_fc_regularizer = torch.tensor(0., device=args.device)
+                    for i in range(4):
+                        for j in range(i+1, 5):
+                            outer_fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])
+                    outer_loss += outer_fc_regularizer
                 
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
@@ -118,6 +124,10 @@ if __name__ == '__main__':
     
     parser.add_argument('--graph-gamma', type=float, default=5.0, help='classwise difference magnitude in making graph edges')
     parser.add_argument('--graph-beta', type=float, default=1e-5, help='hyperparameter for graph regularizer')
+    
+    parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
+    parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
+    parser.add_argument('--task-embedding-method', type=str, default=None, help='task embedding method')
     
     parser.add_argument('--best-valid-error-test', action='store_true', help='Test using the best valid error model')
     parser.add_argument('--best-valid-accuracy-test', action='store_true', help='Test using the best valid accuracy model')
