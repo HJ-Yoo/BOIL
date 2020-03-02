@@ -53,7 +53,7 @@ def main(args, mode, iteration=None):
                     fc_regularizer = torch.tensor(0., device=args.device)
                     for i in range(4):
                         for j in range(i+1, 5):
-                            fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])
+                            fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
                     inner_loss += fc_regularizer
 
                 model.zero_grad()
@@ -67,7 +67,7 @@ def main(args, mode, iteration=None):
                     outer_fc_regularizer = torch.tensor(0., device=args.device)
                     for i in range(4):
                         for j in range(i+1, 5):
-                            outer_fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])
+                            outer_fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
                     outer_loss += outer_fc_regularizer
                 
                 with torch.no_grad():
@@ -118,11 +118,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
     parser.add_argument('--batch-iter', type=int, default=1200, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 1200).')
     parser.add_argument('--train-batches', type=int, default=50, help='Number of batches the model is trained over (i.e., validation save steps) (default: 50).')
-    parser.add_argument('--valid-batches', type=int, default=25, help='Number of batches the model is validated over (default: 5).')
-    parser.add_argument('--test-batches', type=int, default=1000, help='Number of batches the model is tested over (default: 5).')
+    parser.add_argument('--valid-batches', type=int, default=25, help='Number of batches the model is validated over (default: 25).')
+    parser.add_argument('--test-batches', type=int, default=2500, help='Number of batches the model is tested over (default: 2500).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
     
-    parser.add_argument('--graph-gamma', type=float, default=5.0, help='classwise difference magnitude in making graph edges')
+    parser.add_argument('--graph-gamma', type=int, default=5, help='classwise difference magnitude in making graph edges')
     parser.add_argument('--graph-beta', type=float, default=1e-5, help='hyperparameter for graph regularizer')
     
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')

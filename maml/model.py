@@ -65,7 +65,7 @@ class MiniimagenetNet(MetaModule):
             self.classifier = MetaLinear(64 + 64 // 4, out_features)
         
         elif self.task_embedding_method == 'avgpool':
-            self.classifieer = MetaLinear(64 + 64, out_features)
+            self.classifier = MetaLinear(64 + 64, out_features)
         
         else:
             self.classifier = MetaLinear(64, out_features)

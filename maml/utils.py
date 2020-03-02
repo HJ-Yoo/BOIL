@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 from maml.model import OmniglotNet, MiniimagenetNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
 from torchmeta.datasets.helpers import omniglot, miniimagenet, tieredimagenet, cifar_fs, cub, doublemnist, triplemnist
@@ -166,7 +167,11 @@ def get_accuracy(logits, targets):
     return torch.mean(predictions.eq(targets).float())
 
 def get_graph_regularizer(features, labels=None, args=None):
-    features_dist_matrix = torch.cdist(features, features).detach()
+    pairwise_distance = nn.PairwiseDistance(p=2).to(args.device)
+    features_dist_matrix = torch.zeros([len(features), len(features)]).to(args.device)
+    for i in range(len(features)):
+        features_dist_matrix[:,i] = pairwise_distance(features[i].view(1, -1), features)
+
     centroid = torch.zeros([5, features.shape[1]])
     
     for i in range(5):
@@ -183,6 +188,6 @@ def get_graph_regularizer(features, labels=None, args=None):
                 for l in range(args.num_shots):
                     edge_matrix[(5*i)+k][(5*j)+l] = rank_centroid_matrix[i][j]
 
-    penalty = torch.sum(features_dist_matrix*edge_matrix)*args.graph_beta
+    penalty = torch.sum(features_dist_matrix*edge_matrix).to(args.device)*args.graph_beta
 
     return torch.sum(penalty)
