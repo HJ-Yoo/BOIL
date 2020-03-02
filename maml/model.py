@@ -108,18 +108,16 @@ class MiniimagenetNet(MetaModule):
 class GraphInput():
     def __init__(self, edge_generation_method):
         self.edge_generation_method = edge_generation_method
-        if self.edge_generation_method == 'max_normalization':
-            self.max_norm = 0.
+        if self.edge_generation_method == 'weighted_max_normalization':
+            self.weighted_max_norm = 0.
+            self.task_num = 0
         
     def get_graph_inputs(self, features):
         euclidean_matrix = torch.cdist(features, features)
-        if self.edge_generation_method == 'manual':
-            euclidean_matrix = 0.1 * euclidean_matrix
-        elif self.edge_generation_method == 'max_normalization':
-            current_max_norm = torch.max(euclidean_matrix)
-            if self.max_norm < current_max_norm:
-                self.max_norm = current_max_norm
-            euclidean_matrix = euclidean_matrix / self.max_norm
+        if self.edge_generation_method == 'weighted_max_normalization':
+            self.weighted_max_norm = (self.weighted_max_norm*self.task_num + torch.max(euclidean_matrix).detach().cpu()) / (self.task_num+1)
+            euclidean_matrix = euclidean_matrix / self.weighted_max_norm
+            self.task_num += 1
         elif self.edge_generation_method == 'unit_normalization':
             euclidean_matrix = euclidean_matrix / torch.max(euclidean_matrix)
         

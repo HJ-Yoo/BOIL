@@ -122,7 +122,7 @@ if __name__ == '__main__':
     parser.add_argument('--test-batches', type=int, default=2500, help='Number of batches the model is tested over (default: 2500).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
     
-    parser.add_argument('--graph-gamma', type=int, default=5, help='classwise difference magnitude in making graph edges')
+    parser.add_argument('--graph-gamma', type=float, default=5.0, help='classwise difference magnitude in making graph edges')
     parser.add_argument('--graph-beta', type=float, default=1e-5, help='hyperparameter for graph regularizer')
     
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
