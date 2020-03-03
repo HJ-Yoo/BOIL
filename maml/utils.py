@@ -171,15 +171,12 @@ def get_graph_regularizer(features, labels=None, args=None):
     features_dist_matrix = torch.zeros([len(features), len(features)]).to(args.device)
     for i in range(len(features)):
         features_dist_matrix[:,i] = pairwise_distance(features[i].view(1, -1), features)
-
-    centroid = torch.zeros([5, features.shape[1]])
     
+    centroid = torch.zeros([5, features.shape[1]])
     for i in range(5):
         centroid[i] = torch.mean(features[torch.where(labels==i)[0],:], dim=0)
-
     centroid_dist_matrix = torch.cdist(centroid, centroid).detach()
     rank_centroid_matrix = 1 - (centroid_dist_matrix / torch.sum(torch.unique(centroid_dist_matrix))) * args.graph_gamma
-
     edge_matrix = torch.zeros(features_dist_matrix.shape).to(args.device)
 
     for i in range(args.num_ways):

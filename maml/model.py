@@ -43,9 +43,11 @@ class MiniimagenetNet(MetaModule):
         self.hidden_size = hidden_size
         self.task_embedding_method = task_embedding_method
 
-        self.features = MetaSequential(
+        self.features1 = MetaSequential(
             conv3x3(in_channels, 64),
-            conv3x3(64, 64),
+            conv3x3(64, 64)
+        )
+        self.features2 = MetaSequential(
             conv3x3(64, 64),
             conv3x3(64, 64)
         )
@@ -71,18 +73,21 @@ class MiniimagenetNet(MetaModule):
             self.classifier = MetaLinear(64, out_features)
             
     def forward(self, inputs, params=None):
-        features = self.features(inputs, params=get_subdict(params, 'features'))
-        features = self.pool(features)
-        features = features.view((features.size(0), -1))  
+        features1 = self.features1(inputs, params=get_subdict(params, 'features1'))
+        features1_pool = self.pool(features1)
+        features1_pool = features1_pool.view((features1_pool.size(0), -1))
+        features2 = self.features2(features1, params=get_subdict(params, 'features2'))
+        features2 = self.pool(features2)
+        features2 = features2.view((features2.size(0), -1))  
         
         if self.task_embedding_method == 'gcn':
-            edge_index, edge_weight = self.graph_input.get_graph_inputs(features)
-            task_embedding = self.gcn1(x=features,
+            edge_index, edge_weight = self.graph_input.get_graph_inputs(features2)
+            task_embeddings = self.gcn1(x=features2,
                                        edge_index=edge_index,
                                        edge_weight=edge_weight,
                                        params=get_subdict(params, 'gcn1'))
-            task_embedding = torch.mean(task_embedding, dim=0)
-            features = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
+            task_embedding = torch.mean(task_embeddings, dim=0)
+            features2 = torch.cat([features2, torch.stack([task_embedding]*len(features2))], dim=1)
         
         if self.task_embedding_method == 'gcn_2layers':
             edge_index, edge_weight = self.graph_input.get_graph_inputs(features)
@@ -102,9 +107,10 @@ class MiniimagenetNet(MetaModule):
             task_embedding = torch.mean(features, dim=0) # for average pooling embedding
             features = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
         
-        logits = self.classifier(features, params=get_subdict(params, 'classifier'))
-        return features, logits
-    
+        logits = self.classifier(features2, params=get_subdict(params, 'classifier'))
+        
+        return features1_pool, features2, task_embeddings, logits
+
 class GraphInput():
     def __init__(self, edge_generation_method):
         self.edge_generation_method = edge_generation_method

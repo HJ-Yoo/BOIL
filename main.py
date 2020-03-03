@@ -43,11 +43,16 @@ def main(args, mode, iteration=None):
             
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 model.train()
-                support_features, support_logit = model(support_input)
+                support_features1, support_features2, support_task_embeddings, support_logit = model(support_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
                 
                 if args.graph_regularizer:
-                    graph_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
+                    if args.graph_generation_method=='extractor_middle':
+                        graph_regularizer = get_graph_regularizer(features=support_features1, labels=support_target, args=args)
+                    elif args.graph_generation_method=='extractor_end':
+                        graph_regularizer = get_graph_regularizer(features=support_features2, labels=support_target, args=args)
+                    elif args.graph_generation_method=='gcn_end':
+                        graph_regularizer = get_graph_regularizer(features=support_task_embeddings, labels=support_target, args=args)
                     inner_loss += graph_regularizer
                 if args.fc_regularizer:
                     fc_regularizer = torch.tensor(0., device=args.device)
@@ -61,7 +66,7 @@ def main(args, mode, iteration=None):
                 
                 if args.meta_val or args.meta_test:
                     model.eval()
-                query_features, query_logit = model(query_input, params=params)
+                _, query_features, _, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
                 if args.fc_regularizer:
                     outer_fc_regularizer = torch.tensor(0., device=args.device)
@@ -124,6 +129,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--graph-gamma', type=float, default=5.0, help='classwise difference magnitude in making graph edges')
     parser.add_argument('--graph-beta', type=float, default=1e-5, help='hyperparameter for graph regularizer')
+    parser.add_argument('--graph-generation-method', type=str, default=None, help='where to get the features to make the graph')
     
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
     parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
