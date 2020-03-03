@@ -78,7 +78,7 @@ class MiniimagenetNet(MetaModule):
         features1_pool = features1_pool.view((features1_pool.size(0), -1))
         features2 = self.features2(features1, params=get_subdict(params, 'features2'))
         features2 = self.pool(features2)
-        features2 = features2.view((features2.size(0), -1))  
+        features2 = features2.view((features2.size(0), -1))
         
         if self.task_embedding_method == 'gcn':
             edge_index, edge_weight = self.graph_input.get_graph_inputs(features2)
@@ -126,6 +126,17 @@ class GraphInput():
             self.task_num += 1
         elif self.edge_generation_method == 'unit_normalization':
             euclidean_matrix = euclidean_matrix / torch.max(euclidean_matrix)
+        elif self.edge_generation_method == 'mean_cosine_similarity' :
+            featrues = features - torch.mean(features, dim=0, keepdim=True)
+            euclidean_matrix = torch.zeros(euclidean_matrix.shape)
+            pairwise_distance = nn.CosineSimilarity(dim=-1)
+            for i in range(len(features)):
+                euclidean_matrix[:,i] = pairwise_distance(features[i].view(1, -1), features)
+        elif self.edge_generation_method == 'cosine_similarity' :
+            euclidean_matrix = torch.zeros(euclidean_matrix.shape)
+            pairwise_distance = nn.CosineSimilarity(dim=-1)
+            for i in range(len(features)):
+                euclidean_matrix[:,i] = pairwise_distance(features[i].view(1, -1), features)
         
         edge_index = torch.transpose(torch.tensor([[i,j] for i in range(len(features)) for j in range(len(features))]), 0, 1)
         row, col = edge_index
