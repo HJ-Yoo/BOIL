@@ -29,7 +29,11 @@ def main(args, mode, iteration=None):
     with tqdm(dataloader, total=total, leave=False) as pbar:
         for batch_idx, batch in enumerate(pbar):
             model.zero_grad()
-
+            if args.fc_mean and args.meta_train:
+                fc_mean = torch.mean(model.classifier.weight.data, dim=0)
+                for i in range(args.num_ways):
+                    model.classifier.weight.data[i] = fc_mean
+                
             support_inputs, support_targets = batch['train']
             support_inputs = support_inputs.to(device=args.device)
             support_targets = support_targets.to(device=args.device)
@@ -43,7 +47,7 @@ def main(args, mode, iteration=None):
             
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 model.train()
-                support_features1, support_features2, support_task_embeddings, support_logit = model(support_input)
+                support_features, support_task_embedding, support_logit = model(support_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
                 
                 if args.graph_regularizer:
@@ -66,7 +70,7 @@ def main(args, mode, iteration=None):
                 
                 if args.meta_val or args.meta_test:
                     model.eval()
-                _, query_features, _, query_logit = model(query_input, params=params)
+                query_features, query_task_embedding, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
                 if args.fc_regularizer:
                     outer_fc_regularizer = torch.tensor(0., device=args.device)
@@ -138,6 +142,8 @@ if __name__ == '__main__':
     
     parser.add_argument('--best-valid-error-test', action='store_true', help='Test using the best valid error model')
     parser.add_argument('--best-valid-accuracy-test', action='store_true', help='Test using the best valid accuracy model')
+    
+    parser.add_argument('--fc-mean', action='store_true', help='fc initialization with mean per every iteration')
     
     args = parser.parse_args()
     args.device = torch.device(args.device)    

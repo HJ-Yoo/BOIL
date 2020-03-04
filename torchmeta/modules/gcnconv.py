@@ -9,8 +9,8 @@ class MetaGCNConv(gnn.GCNConv, MetaModule):
     __doc__ = gnn.GCNConv.__doc__
     
     def reset_parameters(self):
-        init.xavier_uniform_(self.weight)
-        # init.zeros_(self.weight)
+        # init.xavier_uniform_(self.weight)
+        init.zeros_(self.weight)
         init.zeros_(self.bias)
         self.cached_result = None
         self.cached_num_edges = None
