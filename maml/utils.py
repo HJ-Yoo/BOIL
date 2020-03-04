@@ -138,11 +138,13 @@ def update_parameters(model, loss, step_size=0.5, first_order=False):
     """
     grads = torch.autograd.grad(loss,
                                 model.meta_parameters(),
-                                create_graph=not first_order)
+                                create_graph=not first_order,
+                                allow_unused=True)
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
-        params[name] = param - step_size * grad
+        if grad is not None:
+            params[name] = param - step_size * grad
 
     return params
 

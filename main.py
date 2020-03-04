@@ -43,7 +43,7 @@ def main(args, mode, iteration=None):
             
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 model.train()
-                support_features, support_logit = model(support_input)
+                support_features, support_logit = model(support_input, task_idx, update_mode='inner')
                 inner_loss = F.cross_entropy(support_logit, support_target)
                 
                 if args.graph_regularizer:
@@ -61,7 +61,7 @@ def main(args, mode, iteration=None):
                 
                 if args.meta_val or args.meta_test:
                     model.eval()
-                query_features, query_logit = model(query_input, params=params)
+                query_features, query_task_embedding, query_logit = model(query_input, task_idx, update_mode='outer', params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
                 if args.fc_regularizer:
                     outer_fc_regularizer = torch.tensor(0., device=args.device)
