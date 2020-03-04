@@ -2,9 +2,10 @@
 
 python ./main.py --folder=./dataset \
                  --dataset=miniimagenet \
-                 --device=cuda:0 \
-                 --download \
+                 --device=cuda:1 \
+		 --download \
                  --task-embedding-method=gcn \
-                 --edge-generation-method=manual \
-                 --save-name=te_gcn_manual0.1_l1_concat
+                 --edge-generation-method=max_normalization \
+		 --save-name=te_gcn_maxnorm_l1_output_normalization_relu \
+		 --best-valid-accuracy-test
 echo "finished"

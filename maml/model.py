@@ -55,6 +55,7 @@ class MiniimagenetNet(MetaModule):
         if self.task_embedding_method == 'gcn':
             self.graph_input = GraphInput(edge_generation_method = edge_generation_method)
             self.gcn1 = MetaGCNConv(64, 64 // 2)
+            self.gcn_relu = nn.ReLU()
             self.classifier = MetaLinear(64 + 64 // 2, out_features)
         
         elif self.task_embedding_method == 'gcn_2layers':
@@ -76,13 +77,18 @@ class MiniimagenetNet(MetaModule):
         features = features.view((features.size(0), -1))  
         
         if self.task_embedding_method == 'gcn':
+            # features = features / torch.norm(features, dim=1, keepdim=True)
+            
             edge_index, edge_weight = self.graph_input.get_graph_inputs(features)
             task_embedding = self.gcn1(x=features,
                                        edge_index=edge_index,
                                        edge_weight=edge_weight,
                                        params=get_subdict(params, 'gcn1'))
-            task_embedding = torch.mean(task_embedding, dim=0)
+            features = features / torch.norm(features, dim=1, keepdim=True)
+            task_embedding = self.gcn_relu(torch.mean(task_embedding, dim=0))
+            task_embedding = task_embedding / torch.norm(task_embedding)
             features = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
+            # features = features * torch.sigmoid(torch.mean(task_embedding, dim=0, keepdim=True))
         
         if self.task_embedding_method == 'gcn_2layers':
             edge_index, edge_weight = self.graph_input.get_graph_inputs(features)
@@ -108,13 +114,20 @@ class MiniimagenetNet(MetaModule):
 class GraphInput():
     def __init__(self, edge_generation_method):
         self.edge_generation_method = edge_generation_method
-        if self.edge_generation_method == 'weighted_max_normalization':
+        if self.edge_generation_method == 'max_normalization':
+            self.max_norm = 0.
+        elif self.edge_generation_method == 'weighted_max_normalization':
             self.weighted_max_norm = 0.
             self.task_num = 0
         
     def get_graph_inputs(self, features):
         euclidean_matrix = torch.cdist(features, features)
-        if self.edge_generation_method == 'weighted_max_normalization':
+        if self.edge_generation_method == 'max_normalization':
+            current_max_norm = torch.max(euclidean_matrix)
+            if self.max_norm < current_max_norm:
+                self.max_norm = current_max_norm
+            euclidean_matrix = euclidean_matrix / self.max_norm
+        elif self.edge_generation_method == 'weighted_max_normalization':
             self.weighted_max_norm = (self.weighted_max_norm*self.task_num + torch.max(euclidean_matrix).detach().cpu()) / (self.task_num+1)
             euclidean_matrix = euclidean_matrix / self.weighted_max_norm
             self.task_num += 1
