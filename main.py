@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
@@ -55,13 +56,22 @@ def main(args, mode, iteration=None):
                         for j in range(i+1, 5):
                             fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
                     inner_loss += fc_regularizer
-
+                if args.distance_regularizer:
+                    distance = nn.PairwiseDistance(p=2).to(args.device)
+                    distance_regularizer = torch.tensor(0., device=args.device)
+                    for i in range(len(support_features)):
+                        distance_regularizer += torch.sum(distance(support_features[i].view(1, -1), support_features))
+                    inner_loss -= 1e-3 * distance_regularizer / 2.
+                if args.norm_regularizer:
+                    norm_regularizer = torch.mean(torch.norm(support_features, dim=1))
+                    inner_loss += 1e-1 * norm_regularizer
+                    
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
                 
                 if args.meta_val or args.meta_test:
                     model.eval()
-                query_features, query_task_embedding, query_logit = model(query_input, task_idx, update_mode='outer', params=params)
+                query_features, query_logit = model(query_input, task_idx, update_mode='outer', params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
                 if args.fc_regularizer:
                     outer_fc_regularizer = torch.tensor(0., device=args.device)
@@ -69,7 +79,16 @@ def main(args, mode, iteration=None):
                         for j in range(i+1, 5):
                             outer_fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
                     outer_loss += outer_fc_regularizer
-                
+                if args.distance_regularizer:
+                    distance = nn.PairwiseDistance(p=2).to(args.device)
+                    distance_regularizer = torch.tensor(0., device=args.device)
+                    for i in range(len(query_features)):
+                        distance_regularizer += torch.sum(distance(query_features[i].view(1, -1), query_features))
+                    outer_loss -= 1e-3 * distance_regularizer / 2.
+                if args.norm_regularizer:
+                    norm_regularizer = torch.mean(torch.norm(query_features, dim=1))
+                    outer_loss += 1e-1 * norm_regularizer
+                    
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
 
@@ -127,6 +146,8 @@ if __name__ == '__main__':
     
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
     parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
+    parser.add_argument('--distance-regularizer', action='store_true', help='distance regularizer')
+    parser.add_argument('--norm-regularizer', action='store_true', help='norm regularizer')
     parser.add_argument('--task-embedding-method', type=str, default=None, help='task embedding method')
     parser.add_argument('--edge-generation-method', type=str, default=None, help='edge generation method')
     
