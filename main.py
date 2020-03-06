@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from tqdm import tqdms
+from tqdm import tqdm
 
 from torchmeta.utils.data import BatchMetaDataLoader
 from maml.utils import load_dataset, load_model, update_parameters, get_accuracy, get_graph_regularizer
@@ -21,7 +21,7 @@ def main(args, mode, iteration=None):
     # If you want to control inner update parameter, please see update_parameters function in ./maml/utils.py
     freeze_params = [p for name, p in model.named_parameters() if 'classifier' not in name]
     learnable_params = [p for name, p in model.named_parameters() if 'classifier' in name]
-    meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': 0.1*args.meta_lr},
+    meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': args.meta_lr},
                                        {'params': learnable_params, 'lr': args.meta_lr}]) 
     
     if args.meta_train:
@@ -162,12 +162,18 @@ if __name__ == '__main__':
     parser.add_argument('--best-valid-error-test', action='store_true', help='Test using the best valid error model')
     parser.add_argument('--best-valid-accuracy-test', action='store_true', help='Test using the best valid accuracy model')
     
-    args = parser.parse_args()
-    args.device = torch.device(args.device)    
+    args = parser.parse_args()  
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs'), exist_ok=True)
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models'), exist_ok=True)
     
-    args.num_ways = 5
+    arguments_txt = "" 
+    for k, v in args.__dict__.items():
+        arguments_txt += "{}: {}\n".format(str(k), str(v))
+    filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'arguments.txt')
+    with open(filename, 'w') as f:
+        f.write(arguments_txt[:-1])
+    
+    args.device = torch.device(args.device)  
     model = load_model(args)
     
     if args.init:
