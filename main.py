@@ -175,19 +175,21 @@ if __name__ == '__main__':
     
     args.device = torch.device(args.device)  
     model = load_model(args)
-    
     if args.init:
         args.num_ways = 64
         pretrained_model = load_model(args)
         filename = './pretrained.pt'
-        checkpoint = torch.load(filename, map_location=torch.device(args.device))
+        checkpoint = torch.load(filename)
         pretrained_model.load_state_dict(checkpoint, strict=True)
 
         for pre_p, p in list(zip(pretrained_model.parameters(), model.parameters())):
             if pre_p.shape == p.shape:
                 p.data = copy.deepcopy(pre_p.data)
-                
+        
         args.num_ways = 5
+        u, sigma, v = torch.svd(pretrained_model.classifier.weight.data)
+        classifier_pca = torch.mm(torch.mm(u[:5,:], torch.diag(sigma)), torch.t(v))
+        model.classifier.weight = torch.nn.Parameter(torch.cat([torch.mean(classifier_pca, dim=0, keepdims=True)] * args.num_ways, dim=0))
     
     log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                           columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])

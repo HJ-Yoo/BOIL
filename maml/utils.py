@@ -138,15 +138,14 @@ def update_parameters(model, loss, step_size=0.5, first_order=False):
     """
     grads = torch.autograd.grad(loss,
                                 model.meta_parameters(),
-                                create_graph=not first_order,
-                                allow_unused=True)
+                                create_graph=not first_order)
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
         if 'classifier' in name: # To control inner update parameter
             params[name] = param - step_size * grad
         else:
-            params[name] = param
+            params[name] = param - step_size * grad # params[name] = param
 
     return params
 

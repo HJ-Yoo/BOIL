@@ -40,6 +40,8 @@ class OmniglotNet(MetaModule):
 class MiniimagenetNet(MetaModule):
     def __init__(self, in_channels, out_features, hidden_size, task_embedding_method, edge_generation_method):
         super(MiniimagenetNet, self).__init__()
+        torch.manual_seed(2020)
+        
         self.in_channels = in_channels
         self.out_features = out_features
         self.hidden_size = hidden_size
