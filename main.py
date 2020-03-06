@@ -1,10 +1,11 @@
 import os
+import copy
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from tqdm import tqdm
+from tqdm import tqdms
 
 from torchmeta.utils.data import BatchMetaDataLoader
 from maml.utils import load_dataset, load_model, update_parameters, get_accuracy, get_graph_regularizer
@@ -15,7 +16,13 @@ def main(args, mode, iteration=None):
     
     model.to(device=args.device)
     model.train()
-    meta_optimizer = torch.optim.Adam(model.parameters(), lr=args.meta_lr)
+    
+    # To control outer update parameter
+    # If you want to control inner update parameter, please see update_parameters function in ./maml/utils.py
+    freeze_params = [p for name, p in model.named_parameters() if 'classifier' not in name]
+    learnable_params = [p for name, p in model.named_parameters() if 'classifier' in name]
+    meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': 0.1*args.meta_lr},
+                                       {'params': learnable_params, 'lr': args.meta_lr}]) 
     
     if args.meta_train:
         total = args.train_batches
@@ -91,7 +98,7 @@ def main(args, mode, iteration=None):
                     
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
-
+                    
             outer_loss.div_(args.batch_size)
             accuracy.div_(args.batch_size)
             loss_logs.append(outer_loss.item())
@@ -144,6 +151,7 @@ if __name__ == '__main__':
     parser.add_argument('--graph-gamma', type=float, default=5.0, help='classwise difference magnitude in making graph edges')
     parser.add_argument('--graph-beta', type=float, default=1e-5, help='hyperparameter for graph regularizer')
     
+    parser.add_argument('--init', action='store_true', help='extractor init')
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
     parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
     parser.add_argument('--distance-regularizer', action='store_true', help='distance regularizer')
@@ -159,11 +167,24 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs'), exist_ok=True)
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models'), exist_ok=True)
     
+    args.num_ways = 5
     model = load_model(args)
+    
+    if args.init:
+        args.num_ways = 64
+        pretrained_model = load_model(args)
+        filename = './pretrained.pt'
+        checkpoint = torch.load(filename, map_location=torch.device(args.device))
+        pretrained_model.load_state_dict(checkpoint, strict=True)
+
+        for pre_p, p in list(zip(pretrained_model.parameters(), model.parameters())):
+            if pre_p.shape == p.shape:
+                p.data = copy.deepcopy(pre_p.data)
+                
+        args.num_ways = 5
     
     log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                           columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
-    
     
     if args.best_valid_error_test or args.best_valid_accuracy_test:
         filename = './output/miniimagenet_{}/logs/logs.csv'.format(args.save_name)

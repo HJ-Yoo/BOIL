@@ -143,8 +143,10 @@ def update_parameters(model, loss, step_size=0.5, first_order=False):
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
-        if grad is not None:
+        if 'classifier' in name: # To control inner update parameter
             params[name] = param - step_size * grad
+        else:
+            params[name] = param
 
     return params
 
