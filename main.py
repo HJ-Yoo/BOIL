@@ -50,23 +50,25 @@ def main(args, mode, iteration=None):
                 support_features, support_task_embedding, support_logit = model(support_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
                 
-                if args.graph_regularizer:
-                    if args.graph_generation_method=='extractor_middle':
-                        graph_regularizer = get_graph_regularizer(features=support_features1, labels=support_target, args=args)
-                    elif args.graph_generation_method=='extractor_end':
-                        graph_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
-                    elif args.graph_generation_method=='gcn_end':
-                        graph_regularizer = get_graph_regularizer(features=support_task_embeddings, labels=support_target, args=args)
-                    inner_loss += graph_regularizer
-                if args.fc_regularizer:
-                    fc_regularizer = torch.tensor(0., device=args.device)
-                    for i in range(4):
-                        for j in range(i+1, 5):
-                            fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
-                    inner_loss += fc_regularizer
-                if args.distance_regularizer:
-                    distance_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
-                    inner_loss -= distance_regularizer * args.distance_lambda
+                if (args.meta_val or args.meta_test):
+                    if args.distance_regularizer:
+                        distance_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
+                        outer_loss -= distance_regularizer * args.distance_lambda
+#                 if args.graph_regularizer:
+#                     if args.graph_generation_method=='extractor_middle':
+#                         graph_regularizer = get_graph_regularizer(features=support_features1, labels=support_target, args=args)
+#                     elif args.graph_generation_method=='extractor_end':
+#                         graph_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
+#                     elif args.graph_generation_method=='gcn_end':
+#                         graph_regularizer = get_graph_regularizer(features=support_task_embeddings, labels=support_target, args=args)
+#                     inner_loss += graph_regularizer
+#                 if args.fc_regularizer:
+#                     fc_regularizer = torch.tensor(0., device=args.device)
+#                     for i in range(4):
+#                         for j in range(i+1, 5):
+#                             fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
+#                     inner_loss += fc_regularizer
+                
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
                 
@@ -75,13 +77,11 @@ def main(args, mode, iteration=None):
                 query_features, query_task_embedding, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
                 
-                if args.fc_regularizer:
-                    outer_fc_regularizer = torch.tensor(0., device=args.device)
-                    for i in range(4):
-                        for j in range(i+1, 5):
-                            outer_fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
-                    outer_loss += outer_fc_regularizer
-                
+                if args.meta_train and args.distance_regularizer:
+                    distance_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
+                    outer_loss -= distance_regularizer * args.distance_lambda
+                    print(outer_loss, distance_regularizer)
+                    
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
 
