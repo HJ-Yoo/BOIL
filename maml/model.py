@@ -52,63 +52,15 @@ class MiniimagenetNet(MetaModule):
             conv3x3(64, 64),
             conv3x3(64, 64)
         )
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        self.classifier = MetaLinear(64, out_features)
-#         self.inner_classifier = MetaLinear(64, out_features)
         
-#         self.fc = nn.Linear(64, 64)
-#         self.graph_input = GraphInput(edge_generation_method=edge_generation_method)
-#         self.gcn = MetaGCNConv(64, 32)
-#         self.gcn_relu = nn.ReLU()
-#         self.outer_classifier = MetaLinear(64 + 64, out_features)
+        self.classifier = MetaLinear(64*5*5, out_features)
         
     def forward(self, inputs, task_idx=None, update_mode=None, params=None):
         features = self.features(inputs, params=get_subdict(params, 'features'))
-        features = self.pool(features)
         features = features.view((features.size(0), -1))
         logits = self.classifier(features, params=get_subdict(params, 'classifier'))
         
         return features, logits
-        
-        if update_mode == 'inner':
-            logits = self.inner_classifier(features, params=get_subdict(params, 'inner_classifier'))
-            return features, logits
-        
-        elif update_mode == 'outer':
-#             inner_logits = self.inner_classifier(features, params=get_subdict(params, 'inner_classifier'))
-#             edge_index, edge_weight = self.graph_input.get_graph_inputs(features)
-#             task_embedding = self.gcn(x=features,
-#                                       edge_index=edge_index,
-#                                       edge_weight=edge_weight)
-#             task_embedding = self.gcn_relu(torch.mean(task_embedding, dim=0))
-#             task_embedding = task_embedding / torch.norm(task_embedding)
-#             features = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
-#             self.outer_classifier.weight.data[:,:64] = copy.deepcopy(self.inner_classifier.weight.data)
-#             outer_logits = self.outer_classifier(features)
-#             logits = inner_logits + outer_logits
-            
-            inner_logits = self.inner_classifier(features, params=get_subdict(params, 'inner_classifier'))
-            task_embedding = torch.mean(features, dim=0)
-            features = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
-            self.outer_classifier.weight.data[:,:64] = copy.deepcopy(self.inner_classifier.weight.data)
-            outer_logits = self.outer_classifier(features)
-            logits = inner_logits + outer_logits
-            
-#             edge_index, edge_weight = self.graph_input.get_graph_inputs(features)
-#             task_embedding = self.gcn(x=features,
-#                                       edge_index=edge_index,
-#                                       edge_weight=edge_weight)
-#             task_embedding = torch.sigmoid(torch.mean(task_embedding, dim=0))
-#             features = features * torch.stack([task_embedding]*len(features))
-#             logits = self.inner_classifier(features, params=get_subdict(params, 'inner_classifier'))
-            
-#             task_embedding = torch.mean(features, dim=0)
-#             task_embedding = self.fc(task_embedding)
-#             task_embedding = F.softmax(task_embedding)
-#             features = features * torch.stack([task_embedding]*len(features))
-#             logits = self.inner_classifier(features, params=get_subdict(params, 'inner_classifier'))
-            
-            return features, task_embedding, logits
     
 class GraphInput():
     def __init__(self, edge_generation_method):

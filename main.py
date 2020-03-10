@@ -51,51 +51,34 @@ def main(args, mode, iteration=None):
             
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 model.train()
-                support_features, support_logit = model(support_input, task_idx, update_mode='inner')
-                inner_loss = F.cross_entropy(support_logit, support_target)
-                
+                support_features, support_logit = model(support_input)
+                if args.inner_distance_weight: # args.meta_train
+                    query_features, query_logit = model(query_input)
+                    distance = torch.norm(torch.mean(support_features, dim=0)-torch.mean(query_features, dim=0))
+                    distance_weight = torch.exp(-0.1 * distance * distance).item()
+                    inner_loss = (1-distance_weight)*F.cross_entropy(support_logit, support_target)
+                else:
+                    inner_loss = F.cross_entropy(support_logit, support_target) # + 0.001 * torch.mean(torch.norm(support_features, p=1, dim=1))
+                    
                 if args.graph_regularizer:
                     graph_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
                     inner_loss += graph_regularizer
-                if args.fc_regularizer:
-                    fc_regularizer = torch.tensor(0., device=args.device)
-                    for i in range(4):
-                        for j in range(i+1, 5):
-                            fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
-                    inner_loss += fc_regularizer
-                if args.distance_regularizer:
-                    distance = nn.PairwiseDistance(p=2).to(args.device)
-                    distance_regularizer = torch.tensor(0., device=args.device)
-                    for i in range(len(support_features)):
-                        distance_regularizer += torch.sum(distance(support_features[i].view(1, -1), support_features))
-                    inner_loss -= 1e-3 * distance_regularizer / 2.
-                if args.norm_regularizer:
-                    norm_regularizer = torch.mean(torch.norm(support_features, dim=1))
-                    inner_loss += 1e-1 * norm_regularizer
                     
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
                 
                 if args.meta_val or args.meta_test:
                     model.eval()
-                query_features, query_logit = model(query_input, task_idx, update_mode='outer', params=params)
-                outer_loss += F.cross_entropy(query_logit, query_target)
-                if args.fc_regularizer:
-                    outer_fc_regularizer = torch.tensor(0., device=args.device)
-                    for i in range(4):
-                        for j in range(i+1, 5):
-                            outer_fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
-                    outer_loss += outer_fc_regularizer
-                if args.distance_regularizer:
-                    distance = nn.PairwiseDistance(p=2).to(args.device)
-                    distance_regularizer = torch.tensor(0., device=args.device)
-                    for i in range(len(query_features)):
-                        distance_regularizer += torch.sum(distance(query_features[i].view(1, -1), query_features))
-                    outer_loss -= 1e-3 * distance_regularizer / 2.
-                if args.norm_regularizer:
-                    norm_regularizer = torch.mean(torch.norm(query_features, dim=1))
-                    outer_loss += 1e-1 * norm_regularizer
-                    
+                
+                query_features, query_logit = model(query_input, params=params)
+                if args.distance_weight:
+                    support_features, support_logit = model(support_input, params=params)
+                    distance = torch.norm(torch.mean(support_features, dim=0)-torch.mean(query_features, dim=0))
+                    distance_weight = torch.exp(-0.1 * distance * distance).item()
+                    outer_loss += (1-distance_weight)*F.cross_entropy(query_logit, query_target)
+                else:
+                    outer_loss += F.cross_entropy(query_logit, query_target) # + 0.001 * torch.mean(torch.norm(support_features, p=1, dim=1))
+                                   
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
                     
@@ -136,7 +119,7 @@ if __name__ == '__main__':
     parser.add_argument('--meta-lr', type=float, default=1e-3, help='Learning rate of meta optimizer.')
 
     parser.add_argument('--first-order', action='store_true', help='Use the first-order approximation of MAML.')
-    parser.add_argument('--step-size', type=float, default=0.7, help='Step-size for the gradient step for adaptation (default: 0.5).')
+    parser.add_argument('--step-size', type=float, default=0.5, help='Step-size for the gradient step for adaptation (default: 0.5).')
     parser.add_argument('--hidden-size', type=int, default=64, help='Number of channels for each convolutional layer (default: 64).')
 
     parser.add_argument('--output-folder', type=str, default='./output/', help='Path to the output folder for saving the model (optional).')
@@ -152,10 +135,9 @@ if __name__ == '__main__':
     parser.add_argument('--graph-beta', type=float, default=1e-5, help='hyperparameter for graph regularizer')
     
     parser.add_argument('--init', action='store_true', help='extractor init')
+    parser.add_argument('--inner-distance-weight', action='store_true', help='inner distance weight')
+    parser.add_argument('--distance-weight', action='store_true', help='distance weight')
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
-    parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
-    parser.add_argument('--distance-regularizer', action='store_true', help='distance regularizer')
-    parser.add_argument('--norm-regularizer', action='store_true', help='norm regularizer')
     parser.add_argument('--task-embedding-method', type=str, default=None, help='task embedding method')
     parser.add_argument('--edge-generation-method', type=str, default=None, help='edge generation method')
     
@@ -187,9 +169,9 @@ if __name__ == '__main__':
                 p.data = copy.deepcopy(pre_p.data)
         
         args.num_ways = 5
-        u, sigma, v = torch.svd(pretrained_model.classifier.weight.data)
-        classifier_pca = torch.mm(torch.mm(u[:5,:], torch.diag(sigma)), torch.t(v))
-        model.classifier.weight = torch.nn.Parameter(torch.cat([torch.mean(classifier_pca, dim=0, keepdims=True)] * args.num_ways, dim=0))
+#         u, sigma, v = torch.svd(pretrained_model.classifier.weight.data)
+#         classifier_pca = torch.mm(torch.mm(u[:5,:], torch.diag(sigma)), torch.t(v))
+#         model.classifier.weight = torch.nn.Parameter(torch.cat([torch.mean(classifier_pca, dim=0, keepdims=True)] * args.num_ways, dim=0))
     
     log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                           columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
