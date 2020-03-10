@@ -1,7 +1,9 @@
 import os
+import copy
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
@@ -14,7 +16,13 @@ def main(args, mode, iteration=None):
     
     model.to(device=args.device)
     model.train()
-    meta_optimizer = torch.optim.Adam(model.parameters(), lr=args.meta_lr)
+    
+    # To control outer update parameter
+    # If you want to control inner update parameter, please see update_parameters function in ./maml/utils.py
+    freeze_params = [p for name, p in model.named_parameters() if 'classifier' not in name]
+    learnable_params = [p for name, p in model.named_parameters() if 'classifier' in name]
+    meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': args.meta_lr},
+                                       {'params': learnable_params, 'lr': args.meta_lr}]) 
     
     if args.meta_train:
         total = args.train_batches
@@ -29,10 +37,6 @@ def main(args, mode, iteration=None):
     with tqdm(dataloader, total=total, leave=False) as pbar:
         for batch_idx, batch in enumerate(pbar):
             model.zero_grad()
-            if args.fc_mean and args.meta_train:
-                fc_mean = torch.mean(model.classifier.weight.data, dim=0)
-                for i in range(args.num_ways):
-                    model.classifier.weight.data[i] = fc_mean
                 
             support_inputs, support_targets = batch['train']
             support_inputs = support_inputs.to(device=args.device)
@@ -47,44 +51,39 @@ def main(args, mode, iteration=None):
             
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 model.train()
-                support_features, support_task_embedding, support_logit = model(support_input)
-                inner_loss = F.cross_entropy(support_logit, support_target)
+                initial_params=model.state_dict()
                 
-                if (args.meta_val or args.meta_test):
-                    if args.distance_regularizer:
-                        distance_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
-                        outer_loss -= distance_regularizer * args.distance_lambda
-#                 if args.graph_regularizer:
-#                     if args.graph_generation_method=='extractor_middle':
-#                         graph_regularizer = get_graph_regularizer(features=support_features1, labels=support_target, args=args)
-#                     elif args.graph_generation_method=='extractor_end':
-#                         graph_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
-#                     elif args.graph_generation_method=='gcn_end':
-#                         graph_regularizer = get_graph_regularizer(features=support_task_embeddings, labels=support_target, args=args)
-#                     inner_loss += graph_regularizer
-#                 if args.fc_regularizer:
-#                     fc_regularizer = torch.tensor(0., device=args.device)
-#                     for i in range(4):
-#                         for j in range(i+1, 5):
-#                             fc_regularizer += torch.norm(model.classifier.weight[i]-model.classifier.weight[j])*0.1
-#                     inner_loss += fc_regularizer
+                support_features, support_logit = model(support_input)
+                inner_loss = F.cross_entropy(support_logit, support_target)
                 
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
                 
+                support_features, support_logit = model(support_input, params=params)
+                query_features_, query_logit_ = model(query_input, params=params)
+                
+                graph_loss_LL, graph_loss_LU, graph_loss_UU = get_graph_regularizer(features=[support_features, query_features_], labels=support_target, args=args)
+                print(graph_loss_LL, graph_loss_LU, graph_loss_UU)
+                alpha1, alpha2, alpha3 = 1e-3, 1e-4, 1e-5
+                print('maml ',inner_loss)
+                inner_loss = inner_loss + (alpha1 * graph_loss_LL) + (alpha2 * graph_loss_LU) + (alpha3 * graph_loss_UU)
+                print('total ', inner_loss)
+                                
+                distance = torch.norm(torch.mean(support_features, dim=0) - torch.mean(query_features_, dim=0))
+                adaptive_lr = torch.exp(-0.1 * distance * distance)
+                model.load_state_dict(initial_params)
+
+                adaptive_params = update_parameters(model, inner_loss, step_size=adaptive_lr, first_order=args.first_order)
+                
                 if args.meta_val or args.meta_test:
                     model.eval()
-                query_features, query_task_embedding, query_logit = model(query_input, params=params)
+                
+                query_features, query_logit = model(query_input, params=adaptive_params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
                 
-                if args.meta_train and args.distance_regularizer:
-                    distance_regularizer = get_graph_regularizer(features=support_features, labels=support_target, args=args)
-                    outer_loss -= distance_regularizer * args.distance_lambda
-                    print(outer_loss, distance_regularizer)
-                    
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
-
+                        
             outer_loss.div_(args.batch_size)
             accuracy.div_(args.batch_size)
             loss_logs.append(outer_loss.item())
@@ -139,27 +138,51 @@ if __name__ == '__main__':
     parser.add_argument('--graph-generation-method', type=str, default=None, help='where to get the features to make the graph')
     
     parser.add_argument('--distance-lambda', type=float, default=1.0, help='modulate the magnitude of distance regularizer')
-    parser.add_argument('--distance-regularizer', action='store_true', help='graph regularizer')
+
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
     parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
+    parser.add_argument('--distance-regularizer', action='store_true', help='distance regularizer')
+    parser.add_argument('--norm-regularizer', action='store_true', help='norm regularizer')
     parser.add_argument('--task-embedding-method', type=str, default=None, help='task embedding method')
     parser.add_argument('--edge-generation-method', type=str, default=None, help='edge generation method')
     
     parser.add_argument('--best-valid-error-test', action='store_true', help='Test using the best valid error model')
     parser.add_argument('--best-valid-accuracy-test', action='store_true', help='Test using the best valid accuracy model')
     
-    parser.add_argument('--fc-mean', action='store_true', help='fc initialization with mean per every iteration')
-    
+    parser.add_argument('--init', action='store_true', help='model initialization')
+
     args = parser.parse_args()
-    args.device = torch.device(args.device)    
+    
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs'), exist_ok=True)
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models'), exist_ok=True)
     
+    arguments_txt = "" 
+    for k, v in args.__dict__.items():
+        arguments_txt += "{}: {}\n".format(str(k), str(v))
+    filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'arguments.txt')
+    with open(filename, 'w') as f:
+        f.write(arguments_txt[:-1])
+    
+    args.device = torch.device(args.device)  
     model = load_model(args)
+    if args.init:
+        args.num_ways = 64
+        pretrained_model = load_model(args)
+        filename = './pretrained.pt'
+        checkpoint = torch.load(filename)
+        pretrained_model.load_state_dict(checkpoint, strict=True)
+
+        for pre_p, p in list(zip(pretrained_model.parameters(), model.parameters())):
+            if pre_p.shape == p.shape:
+                p.data = copy.deepcopy(pre_p.data)
+        
+        args.num_ways = 5
+        u, sigma, v = torch.svd(pretrained_model.classifier.weight.data)
+        classifier_pca = torch.mm(torch.mm(u[:5,:], torch.diag(sigma)), torch.t(v))
+        model.classifier.weight = torch.nn.Parameter(torch.cat([torch.mean(classifier_pca, dim=0, keepdims=True)] * args.num_ways, dim=0))
     
     log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                           columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
-    
     
     if args.best_valid_error_test or args.best_valid_accuracy_test:
         filename = './output/miniimagenet_{}/logs/logs.csv'.format(args.save_name)

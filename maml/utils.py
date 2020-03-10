@@ -142,7 +142,10 @@ def update_parameters(model, loss, step_size=0.5, first_order=False):
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
-        params[name] = param - step_size * grad
+        if 'classifier' in name: # To control inner update parameter
+            params[name] = param - step_size * grad
+        else:
+            params[name] = param - step_size * grad # params[name] = param
 
     return params
 
@@ -167,24 +170,48 @@ def get_accuracy(logits, targets):
     return torch.mean(predictions.eq(targets).float())
 
 def get_graph_regularizer(features, labels=None, args=None):
-    pairwise_distance = nn.PairwiseDistance(p=2).to(args.device)
-    features_dist_matrix = torch.zeros([len(features), len(features)]).to(args.device)
-    for i in range(len(features)):
-        features_dist_matrix[:,i] = pairwise_distance(features[i].view(1, -1), features)
+    support_features, query_features = features[0], features[1]
+    pairwise_distance = nn.PairwiseDistance(p=2)
+    graph_distance_ll = torch.zeros([len(support_features), len(support_features)]).to(args.device)
+    for i in range(len(support_features)):
+        graph_distance_ll[:,i] = pairwise_distance(support_features[i].view(1, -1), support_features)
+    edge_weight_ll = torch.zeros([len(labels), len(labels)]).to(args.device)
+    for i, class_i in enumerate(labels):
+        for j, class_j in enumerate(labels):
+            if class_i == class_j:
+                edge_weight_ll[i][j] = 1
+    graph_loss_ll = torch.sum((edge_weight_ll * graph_distance_ll*0.5))
     
-    centroid = torch.zeros([5, features.shape[1]])
-    for i in range(5):
-        centroid[i] = torch.mean(features[torch.where(labels==i)[0],:], dim=0)
-    centroid_dist_matrix = torch.cdist(centroid, centroid).detach()
-    rank_centroid_matrix = 1 - (centroid_dist_matrix / torch.sum(torch.unique(centroid_dist_matrix))) * args.graph_gamma
-    edge_matrix = torch.zeros(features_dist_matrix.shape).to(args.device)
+    graph_distance_lu = torch.zeros([len(support_features), len(query_features)]).to(args.device)
+    for i in range(len(query_features)):
+        graph_distance_lu[:,i] = pairwise_distance(query_features[i].view(1, -1), support_features)
+    edge_weight_lu = torch.ones_like(graph_distance_lu).to(args.device)
+    graph_loss_lu = torch.sum(edge_weight_lu * graph_distance_lu*0.5)
+    
+    graph_distance_uu = torch.zeros([len(query_features), len(query_features)]).to(args.device)
+    for i in range(len(query_features)):
+        graph_distance_uu[:,i] = pairwise_distance(query_features[i].view(1, -1), query_features)
+    edge_weight_uu = torch.ones_like(graph_distance_uu).to(args.device)
+    graph_loss_uu = torch.sum(edge_weight_uu * graph_distance_uu*0.5)
 
-    for i in range(args.num_ways):
-        for j in range(args.num_ways):
-            for k in range(args.num_shots):
-                for l in range(args.num_shots):
-                    edge_matrix[(5*i)+k][(5*j)+l] = rank_centroid_matrix[i][j]
+#     pairwise_distance = nn.PairwiseDistance(p=2).to(args.device)
+#     features_dist_matrix = torch.zeros([len(features), len(features)]).to(args.device)
+#     for i in range(len(features)):
+#         features_dist_matrix[:,i] = pairwise_distance(features[i].view(1, -1), features)
+    
+#     centroid = torch.zeros([5, features.shape[1]])
+#     for i in range(5):
+#         centroid[i] = torch.mean(features[torch.where(labels==i)[0],:], dim=0)
+#     centroid_dist_matrix = torch.cdist(centroid, centroid).detach()
+#     rank_centroid_matrix = 1 - (centroid_dist_matrix / torch.sum(torch.unique(centroid_dist_matrix))) * args.graph_gamma
+#     edge_matrix = torch.zeros(features_dist_matrix.shape).to(args.device)
 
-    penalty = torch.sum(features_dist_matrix*edge_matrix).to(args.device)*args.graph_beta
+#     for i in range(args.num_ways):
+#         for j in range(args.num_ways):
+#             for k in range(args.num_shots):
+#                 for l in range(args.num_shots):
+#                     edge_matrix[(5*i)+k][(5*j)+l] = rank_centroid_matrix[i][j]
 
-    return torch.sum(penalty)
+#     penalty = torch.sum(features_dist_matrix*edge_matrix).to(args.device)*args.graph_beta
+
+    return graph_loss_ll, graph_loss_lu, graph_loss_uu

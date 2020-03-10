@@ -2,9 +2,8 @@
 
 python ./main.py --folder=./dataset \
                  --dataset=miniimagenet \
-                 --device=cuda:0 \
+                 --device=cuda:1 \
                  --download \
-                 --task-embedding-method=gcn \
-                 --edge-generation-method=manual \
-                 --save-name=te_gcn_manual0.1_l1_concat
+		 --step-size=0.01 \
+                 --save-name=step_size0.01
 echo "finished"

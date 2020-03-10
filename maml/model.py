@@ -1,6 +1,8 @@
 import math
+import copy
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchmeta.modules import (MetaModule, MetaSequential, MetaConv2d,
                                MetaGCNConv, MetaBatchNorm2d, MetaLinear)
 from torchmeta.modules.utils import get_subdict
@@ -38,107 +40,45 @@ class OmniglotNet(MetaModule):
 class MiniimagenetNet(MetaModule):
     def __init__(self, in_channels, out_features, hidden_size, task_embedding_method, edge_generation_method):
         super(MiniimagenetNet, self).__init__()
+        torch.manual_seed(2020)
+        
         self.in_channels = in_channels
         self.out_features = out_features
         self.hidden_size = hidden_size
         self.task_embedding_method = task_embedding_method
-
         self.features = MetaSequential(
             conv3x3(in_channels, 64),
             conv3x3(64, 64),
             conv3x3(64, 64),
             conv3x3(64, 64)
         )
-        
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        
-        if self.task_embedding_method == 'gcn_concat':
-            self.graph_input = GraphInput(edge_generation_method = edge_generation_method)
-            self.gcn1 = MetaGCNConv(64, 64 // 2)
-            self.classifier = MetaLinear(64 + 64 // 2, out_features)
-        
-        elif self.task_embedding_method == 'gcn_scaling':
-            self.graph_input = GraphInput(edge_generation_method = edge_generation_method)
-            self.gcn1 = MetaGCNConv(64, 64)
-            self.gcn_sigmoid = nn.Sigmoid()
-            self.classifier = MetaLinear(64, out_features)
-        elif self.task_embedding_method == 'gcn_fc_layer':
-            self.graph_input = GraphInput(edge_generation_method = edge_generation_method)
-            self.gcn1 = MetaGCNConv(64, 64 // 2)
-            self.gcn_leakyrelu1 = nn.LeakyReLU()
-            self.gcn_fc = nn.Linear(64//2, 64//4)
-            self.gcn_leakyrelu2 = nn.LeakyReLU()
-            self.classifier = MetaLinear(64 + 64 // 4, out_features)
-        
-        elif self.task_embedding_method == 'avgpool':
-            self.classifier = MetaLinear(64 + 64, out_features)
-        
-        else:
-            self.classifier = MetaLinear(64, out_features)
-            
-    def forward(self, inputs, params=None):
-        features = self.features(inputs, params=get_subdict(params, 'features'))
-        features = self.pool(features)
-        features = features.view((features.size(0), -1))
+        self.classifier = MetaLinear(64*5*5, out_features)
 
-        if self.task_embedding_method == 'gcn_concat':
-            edge_index, edge_weight = self.graph_input.get_graph_inputs(features)
-            task_embeddings = self.gcn1(x=features,
-                                       edge_index=edge_index,
-                                       edge_weight=edge_weight,
-                                       params=get_subdict(params, 'gcn1'))
-            task_embedding = torch.mean(task_embeddings, dim=0)
-            features_cat = torch.cat([features, torch.stack([task_embedding]*len(features2))], dim=1)
-            logits = self.classifier(features_cat, params=get_subdict(params, 'classifier'))
-            return features, task_embedding, logits
+    def forward(self, inputs, task_idx=None, update_mode=None, params=None):
+        features = self.features(inputs, params=get_subdict(params, 'features'))
+        features = features.view((features.size(0), -1))
+        logits = self.classifier(features, params=get_subdict(params, 'classifier'))
         
-        elif self.task_embedding_method == 'gcn_scaling':
-            edge_index, edge_weight = self.graph_input.get_graph_inputs(features)
-            task_embedding = self.gcn1(x=features,
-                                       edge_index=edge_index,
-                                       edge_weight=edge_weight,
-                                       params=get_subdict(params, 'gcn1'))
-            task_embedding = torch.mean(task_embedding, dim=0)
-            task_scaling = self.gcn_sigmoid(task_embedding)
-            features_cat = features * task_scaling
-            logits = self.classifier(features_cat, params=get_subdict(params, 'classifier'))
-            return features, task_embedding, logits
-        
-        elif self.task_embedding_method == 'gcn_fc_layer':
-            edge_index, edge_weight = self.graph_input.get_graph_inputs(features)
-            task_embedding = self.gcn1(x=features,
-                                       edge_index=edge_index,
-                                       edge_weight=edge_weight,
-                                       params=get_subdict(params, 'gcn1'))
-            task_embedding = self.gcn_leakyrelu1(task_embedding)
-            task_embedding = self.gcn_fc(task_embedding)
-            task_embedding = self.gcn_leakyrelu2(task_embedding)
-            task_embedding = torch.mean(task_embedding, dim=0)
-            features_cat = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)    
-            logits = self.classifier(features_cat, params=get_subdict(params, 'classifier'))
-            return features, task_embedding, logits
-        
-        elif self.task_embedding_method == 'avgpool':
-            task_embedding = torch.mean(features, dim=0) # for average pooling embedding
-            features_cat = torch.cat([features, torch.stack([task_embedding]*len(features))], dim=1)
-            logits = self.classifier(features_cat, params=get_subdict(params, 'classifier'))
-            return features, task_embedding, logits
-        
-        else:
-            logits = self.classifier(features, params=get_subdict(params, 'classifier'))
-            return features, None, logits
-        
+        return features, logits
+    
 class GraphInput():
     def __init__(self, edge_generation_method):
         self.edge_generation_method = edge_generation_method
-        if self.edge_generation_method == 'weighted_max_normalization':
+        if self.edge_generation_method == 'max_normalization':
+            self.max_norm = 0.
+        elif self.edge_generation_method == 'weighted_max_normalization':
             self.weighted_max_norm = 0.
             self.task_num = 0
         elif self.edge_generation_method == 'max_normalization':
             self.max_norm = 0.
     def get_graph_inputs(self, features, gamma=2.0):
         euclidean_matrix = torch.cdist(features, features)
-        if self.edge_generation_method == 'weighted_max_normalization':
+        if self.edge_generation_method == 'max_normalization':
+            current_max_norm = torch.max(euclidean_matrix)
+            if self.max_norm < current_max_norm:
+                self.max_norm = current_max_norm
+            euclidean_matrix = euclidean_matrix / self.max_norm
+        elif self.edge_generation_method == 'weighted_max_normalization':
             self.weighted_max_norm = (self.weighted_max_norm*self.task_num + torch.max(euclidean_matrix).detach().cpu()) / (self.task_num+1)
             euclidean_matrix = euclidean_matrix / self.weighted_max_norm
             self.task_num += 1
