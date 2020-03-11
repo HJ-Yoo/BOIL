@@ -2,8 +2,26 @@
 
 python ./main.py --folder=./dataset \
                  --dataset=miniimagenet \
-                 --device=cuda:1 \
+                 --device=cuda:0\
                  --download \
-		 --step-size=0.01 \
-                 --save-name=step_size0.01
+                 --adaptive-lr \
+                 --save-name=adaptive_lr_inner
+                 
+python ./main.py --folder=./dataset \
+                 --dataset=miniimagenet \
+                 --device=cuda:0\
+                 --download \
+                 --graph-regularizer \
+                 --graph-beta=1e-2 \
+                 --save-name=new_gr1e-2_outer
+                 
+python ./main.py --folder=./dataset \
+                 --dataset=miniimagenet \
+                 --device=cuda:0\
+                 --download \
+                 --graph-regularizer \
+                 --graph-beta=1e-2 \
+                 --adaptive-lr \
+                 --save-name=adaptive_lr_inner_new_gr1e-2_outer
+                 
 echo "finished"

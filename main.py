@@ -50,36 +50,38 @@ def main(args, mode, iteration=None):
             accuracy = torch.tensor(0., device=args.device)
             
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
+                # inner loop
                 model.train()
-                initial_params=model.state_dict()
+                if args.adaptive_lr:
+                    initial_params=model.state_dict()
                 
                 support_features, support_logit = model(support_input)
+                if args.adaptive_lr:
+                    query_features_, query_logit_ = model(query_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
                 
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
                 
-                support_features, support_logit = model(support_input, params=params)
-                query_features_, query_logit_ = model(query_input, params=params)
-                
-                graph_loss_LL, graph_loss_LU, graph_loss_UU = get_graph_regularizer(features=[support_features, query_features_], labels=support_target, args=args)
-                print(graph_loss_LL, graph_loss_LU, graph_loss_UU)
-                alpha1, alpha2, alpha3 = 1e-3, 1e-4, 1e-5
-                print('maml ',inner_loss)
-                inner_loss = inner_loss + (alpha1 * graph_loss_LL) + (alpha2 * graph_loss_LU) + (alpha3 * graph_loss_UU)
-                print('total ', inner_loss)
-                                
-                distance = torch.norm(torch.mean(support_features, dim=0) - torch.mean(query_features_, dim=0))
-                adaptive_lr = torch.exp(-0.1 * distance * distance)
-                model.load_state_dict(initial_params)
+                if args.adaptive_lr:
+                    distance = torch.norm(torch.mean(support_features, dim=0) - torch.mean(query_features_, dim=0))
+                    adaptive_lr = torch.exp(-0.1 * distance * distance)
 
-                adaptive_params = update_parameters(model, inner_loss, step_size=adaptive_lr, first_order=args.first_order)
+                    model.load_state_dict(initial_params)
+                    model.zero_grad()
+                    adaptive_params = update_parameters(model, inner_loss, step_size=adaptive_lr, first_order=args.first_order)
+                    params=adaptive_params
                 
+                # outer loop
                 if args.meta_val or args.meta_test:
                     model.eval()
-                
-                query_features, query_logit = model(query_input, params=adaptive_params)
+                    
+                query_features, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
+                if args.graph_regularizer:
+                    support_features_, support_logit_ = model(support_input, params=params)
+                    graph_loss = get_graph_regularizer(features=torch.cat((support_features_, query_features), dim=0), labels=support_target, args=args)
+                    outer_loss += args.graph_beta * graph_loss
                 
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
@@ -137,6 +139,7 @@ if __name__ == '__main__':
     parser.add_argument('--graph-beta', type=float, default=1e-5, help='hyperparameter for graph regularizer')
     parser.add_argument('--graph-generation-method', type=str, default=None, help='where to get the features to make the graph')
     
+    parser.add_argument('--adaptive-lr', action='store_true', help='adaptive learning rate in inner loop')
     parser.add_argument('--distance-lambda', type=float, default=1.0, help='modulate the magnitude of distance regularizer')
 
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')

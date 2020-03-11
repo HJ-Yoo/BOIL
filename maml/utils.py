@@ -170,30 +170,23 @@ def get_accuracy(logits, targets):
     return torch.mean(predictions.eq(targets).float())
 
 def get_graph_regularizer(features, labels=None, args=None):
-    support_features, query_features = features[0], features[1]
     pairwise_distance = nn.PairwiseDistance(p=2)
-    graph_distance_ll = torch.zeros([len(support_features), len(support_features)]).to(args.device)
-    for i in range(len(support_features)):
-        graph_distance_ll[:,i] = pairwise_distance(support_features[i].view(1, -1), support_features)
-    edge_weight_ll = torch.zeros([len(labels), len(labels)]).to(args.device)
+    graph_distance = torch.zeros([len(features), len(features)]).to(args.device)
+    for i in range(len(features)):
+        graph_distance[:,i] = pairwise_distance(features[i].view(1, -1), features)
+    edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
     for i, class_i in enumerate(labels):
         for j, class_j in enumerate(labels):
             if class_i == class_j:
-                edge_weight_ll[i][j] = 1
-    graph_loss_ll = torch.sum((edge_weight_ll * graph_distance_ll*0.5))
+                edge_weight_LL[i][j] = 0.5
+    edge_weight_LU = torch.ones([25, 75]).to(args.device)/4
+    edge_weight_UU = torch.ones([75, 75]).to(args.device)/4
     
-    graph_distance_lu = torch.zeros([len(support_features), len(query_features)]).to(args.device)
-    for i in range(len(query_features)):
-        graph_distance_lu[:,i] = pairwise_distance(query_features[i].view(1, -1), support_features)
-    edge_weight_lu = torch.ones_like(graph_distance_lu).to(args.device)
-    graph_loss_lu = torch.sum(edge_weight_lu * graph_distance_lu*0.5)
+    edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
     
-    graph_distance_uu = torch.zeros([len(query_features), len(query_features)]).to(args.device)
-    for i in range(len(query_features)):
-        graph_distance_uu[:,i] = pairwise_distance(query_features[i].view(1, -1), query_features)
-    edge_weight_uu = torch.ones_like(graph_distance_uu).to(args.device)
-    graph_loss_uu = torch.sum(edge_weight_uu * graph_distance_uu*0.5)
-
+    graph_loss = torch.sum(graph_distance * edge_weight)
+    
+    
 #     pairwise_distance = nn.PairwiseDistance(p=2).to(args.device)
 #     features_dist_matrix = torch.zeros([len(features), len(features)]).to(args.device)
 #     for i in range(len(features)):
@@ -214,4 +207,4 @@ def get_graph_regularizer(features, labels=None, args=None):
 
 #     penalty = torch.sum(features_dist_matrix*edge_matrix).to(args.device)*args.graph_beta
 
-    return graph_loss_ll, graph_loss_lu, graph_loss_uu
+    return graph_loss
