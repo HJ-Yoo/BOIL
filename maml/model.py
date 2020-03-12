@@ -38,14 +38,13 @@ class OmniglotNet(MetaModule):
         return features, logits
 
 class MiniimagenetNet(MetaModule):
-    def __init__(self, in_channels, out_features, hidden_size, task_embedding_method, edge_generation_method):
+    def __init__(self, in_channels, out_features, hidden_size):
         super(MiniimagenetNet, self).__init__()
         torch.manual_seed(2020)
         
         self.in_channels = in_channels
         self.out_features = out_features
         self.hidden_size = hidden_size
-        self.task_embedding_method = task_embedding_method
         self.features = MetaSequential(
             conv3x3(in_channels, 64),
             conv3x3(64, 64),
@@ -60,6 +59,44 @@ class MiniimagenetNet(MetaModule):
         logits = self.classifier(features, params=get_subdict(params, 'classifier'))
         
         return features, logits
+
+class ScaleNet(MetaModule):
+    """Graph Construction Module"""
+    def __init__(self):
+        super(ScaleNet, self).__init__()
+
+        self.layer1 = MetaSequential(
+            MetaConv2d(64, 64, kernel_size=3, padding=1),
+            MetaBatchNorm2d(64, momentum=1., track_running_stats=False),
+            nn.LeakyReLU(),
+            nn.MaxPool2d(2, padding=1)
+        )
+        self.layer2 = MetaSequential(
+            MetaConv2d(64, 1, kernel_size=3, padding=1),
+            MetaBatchNorm2d(1, momentum=1., track_running_stats=False),
+            nn.LeakyReLU(),
+            nn.MaxPool2d(2, padding=1)
+        )
+        self.fc3 = MetaLinear(2*2, 8)
+        self.fc4 = MetaLinear(8, 1)
+
+    def forward(self, inputs):
+        inputs = inputs.view(-1,64,5,5)
+        scale = self.layer1(inputs)
+        scale = self.layer2(scale)
+        # flatten
+        scale = scale.view((scale.size(0),-1))
+        scale = F.relu(self.fc3(scale))
+        scale = self.fc4(scale) # no relu
+        scale = scale.view(scale.size(0),-1) # bs*1
+        
+        return scale    
+    
+    
+
+    
+    
+    
     
 class GraphInput():
     def __init__(self, edge_generation_method):

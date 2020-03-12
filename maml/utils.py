@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
+import numpy as np
 
-from maml.model import OmniglotNet, MiniimagenetNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
+from maml.model import OmniglotNet, MiniimagenetNet, ScaleNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
 from torchmeta.datasets.helpers import omniglot, miniimagenet, tieredimagenet, cifar_fs, cub, doublemnist, triplemnist
 from collections import OrderedDict
 
@@ -103,7 +104,8 @@ def load_model(args):
     if args.dataset == 'omniglot':
         model = OmniglotNet(1, args.num_ways, hidden_size=args.hidden_size)
     elif args.dataset == 'miniimagenet':
-        model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size, task_embedding_method=args.task_embedding_method, edge_generation_method=args.edge_generation_method)
+        model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size)
+        scale_model = ScaleNet()
     elif args.dataset == 'tieredimagenet':
         pass
     elif args.dataset == 'cifar_fs':
@@ -115,7 +117,7 @@ def load_model(args):
     elif args.dataset == 'triplemnist':
         pass
     
-    return model
+    return model, scale_model
 
 def update_parameters(model, loss, step_size=0.5, first_order=False):
     """Update the parameters of the model, with one step of gradient descent.
@@ -169,24 +171,48 @@ def get_accuracy(logits, targets):
     _, predictions = torch.max(logits, dim=-1)
     return torch.mean(predictions.eq(targets).float())
 
-def get_graph_regularizer(features, labels=None, args=None):
-    pairwise_distance = nn.PairwiseDistance(p=2)
-    graph_distance = torch.zeros([len(features), len(features)]).to(args.device)
-    for i in range(len(features)):
-        graph_distance[:,i] = pairwise_distance(features[i].view(1, -1), features)
+def get_graph_regularizer(features, labels=None, model=None, args=None):
+    eps = np.finfo(float).eps
+    scale = model(features)
+    features = features / (scale+eps)
+    
+    features1 = torch.unsqueeze(features, 1)
+    features2 = torch.unsqueeze(features, 0)
+    features_distance = torch.mean((features1-features2)**2, dim=2)
+    features_distance = torch.exp(-features_distance/2)
+
     edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
     for i, class_i in enumerate(labels):
         for j, class_j in enumerate(labels):
             if class_i == class_j:
                 edge_weight_LL[i][j] = 0.5
     edge_weight_LU = torch.ones([25, 75]).to(args.device)/4
-    edge_weight_UU = torch.ones([75, 75]).to(args.device)/4
-    
+    if args.graph_edge_generation == 'ss_sq_qq':
+        edge_weight_UU = torch.ones([75, 75]).to(args.device)/4
+    elif args.graph_edge_generation == 'ss_sq':
+        edge_weight_UU = torch.zeros([75, 75]).to(args.device)
+        
     edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
     
-    graph_loss = torch.sum(graph_distance * edge_weight)
+    graph_loss = torch.sum(features_distance*edge_weight)
+
+#==============================================================================================================================    
+#     pairwise_distance = nn.PairwiseDistance(p=2)
+#     graph_distance = torch.zeros([len(features), len(features)]).to(args.device)
+#     for i in range(len(features)):
+#         graph_distance[:,i] = pairwise_distance(features[i].view(1, -1), features)
+#     edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
+#     for i, class_i in enumerate(labels):
+#         for j, class_j in enumerate(labels):
+#             if class_i == class_j:
+#                 edge_weight_LL[i][j] = 0.5
+#     edge_weight_LU = torch.ones([25, 75]).to(args.device)/4
+#     edge_weight_UU = torch.ones([75, 75]).to(args.device)/4
     
+#     edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
     
+#     graph_loss = torch.sum(graph_distance * edge_weight)
+#================================================================================================================================
 #     pairwise_distance = nn.PairwiseDistance(p=2).to(args.device)
 #     features_dist_matrix = torch.zeros([len(features), len(features)]).to(args.device)
 #     for i in range(len(features)):

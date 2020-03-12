@@ -15,14 +15,18 @@ def main(args, mode, iteration=None):
     dataloader = BatchMetaDataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     
     model.to(device=args.device)
+    scale_model.to(device=args.device)
     model.train()
+    scale_model.train()
     
     # To control outer update parameter
     # If you want to control inner update parameter, please see update_parameters function in ./maml/utils.py
     freeze_params = [p for name, p in model.named_parameters() if 'classifier' not in name]
     learnable_params = [p for name, p in model.named_parameters() if 'classifier' in name]
+    scale_params = [p for name, p in scale_model.named_parameters()]
     meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': args.meta_lr},
-                                       {'params': learnable_params, 'lr': args.meta_lr}]) 
+                                       {'params': learnable_params, 'lr': args.meta_lr},
+                                       {'params': scale_params, 'lr': args.meta_lr}]) 
     
     if args.meta_train:
         total = args.train_batches
@@ -80,7 +84,7 @@ def main(args, mode, iteration=None):
                 outer_loss += F.cross_entropy(query_logit, query_target)
                 if args.graph_regularizer:
                     support_features_, support_logit_ = model(support_input, params=params)
-                    graph_loss = get_graph_regularizer(features=torch.cat((support_features_, query_features), dim=0), labels=support_target, args=args)
+                    graph_loss = get_graph_regularizer(features=torch.cat((support_features_, query_features), dim=0), labels=support_target, model=scale_model, args=args)
                     outer_loss += args.graph_beta * graph_loss
                 
                 with torch.no_grad():
@@ -137,7 +141,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--graph-gamma', type=float, default=5.0, help='classwise difference magnitude in making graph edges')
     parser.add_argument('--graph-beta', type=float, default=1e-5, help='hyperparameter for graph regularizer')
-    parser.add_argument('--graph-generation-method', type=str, default=None, help='where to get the features to make the graph')
+    parser.add_argument('--graph-edge-generation', type=str, default=None, help='where to get the features to make the graph')
     
     parser.add_argument('--adaptive-lr', action='store_true', help='adaptive learning rate in inner loop')
     parser.add_argument('--distance-lambda', type=float, default=1.0, help='modulate the magnitude of distance regularizer')
@@ -167,7 +171,7 @@ if __name__ == '__main__':
         f.write(arguments_txt[:-1])
     
     args.device = torch.device(args.device)  
-    model = load_model(args)
+    model, scale_model = load_model(args)
     if args.init:
         args.num_ways = 64
         pretrained_model = load_model(args)
