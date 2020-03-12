@@ -67,7 +67,25 @@ def main(args, mode, iteration=None):
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
                 
-                if args.adaptive_lr:
+                if args.adaptive_lr_double_inner_loop:
+                    support_features_, support_logit_ = model(support_input, params=params) # get features from task specific parameters
+                    query_features_, query_logit_ = model(query_input, params=params)
+                    second_inner_loss = F.cross_entropy(support_logit_, support_target)
+                    
+                    distance = torch.norm(torch.mean(support_features_, dim=0) - torch.mean(query_features_, dim=0))
+                    adaptive_lr = torch.exp(-0.1 * distance * distance)
+                    model.zero_grad()
+                    adaptive_params = update_parameters(model, second_inner_loss, step_size=adaptive_lr, first_order=args.first_order) # not from initial parameter
+                    params = adaptive_params
+                
+                elif args.double_inner_loop:
+                    support_features_, support_logit_ = model(support_input, params=params)
+                    second_inner_loss = F.cross_entropy(support_logit_, support_target)
+                    model.zero_grad()
+                    second_params = update_parameters(model, second_inner_loss, step_size=args.step_size, irst_order=args.first_order)
+                    params = second_params
+                
+                elif args.adaptive_lr:
                     distance = torch.norm(torch.mean(support_features, dim=0) - torch.mean(query_features_, dim=0))
                     adaptive_lr = torch.exp(-0.1 * distance * distance)
 
@@ -144,11 +162,13 @@ if __name__ == '__main__':
     parser.add_argument('--graph-edge-generation', type=str, default=None, help='where to get the features to make the graph')
     
     parser.add_argument('--adaptive-lr', action='store_true', help='adaptive learning rate in inner loop')
-    parser.add_argument('--distance-lambda', type=float, default=1.0, help='modulate the magnitude of distance regularizer')
+    parser.add_argument('--adaptive-lr-double-inner-loop', action='store_true', help='adaptive learning rate in the second inner loop')
+    parser.add_argument('--double-inner-loop', action='store_true', help='maml with twice inner loop for comparison')
 
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
     parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
     parser.add_argument('--distance-regularizer', action='store_true', help='distance regularizer')
+    parser.add_argument('--distance-lambda', type=float, default=1.0, help='modulate the magnitude of distance regularizer')
     parser.add_argument('--norm-regularizer', action='store_true', help='norm regularizer')
     parser.add_argument('--task-embedding-method', type=str, default=None, help='task embedding method')
     parser.add_argument('--edge-generation-method', type=str, default=None, help='edge generation method')
