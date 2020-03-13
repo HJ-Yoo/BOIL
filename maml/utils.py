@@ -181,18 +181,31 @@ def get_graph_regularizer(features, labels=None, model=None, args=None):
     features_distance = torch.mean((features1-features2)**2, dim=2)
     features_distance = torch.exp(-features_distance/2)
 
-    edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
-    for i, class_i in enumerate(labels):
-        for j, class_j in enumerate(labels):
-            if class_i == class_j:
-                edge_weight_LL[i][j] = 0.5
-    edge_weight_LU = torch.ones([25, 75]).to(args.device)/4
     if args.graph_edge_generation == 'ss_sq_qq':
+        edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
+        for i, class_i in enumerate(labels):
+            for j, class_j in enumerate(labels):
+                if class_i == class_j:
+                    edge_weight_LL[i][j] = 0.5
+        edge_weight_LU = torch.ones([25, 75]).to(args.device)/4
         edge_weight_UU = torch.ones([75, 75]).to(args.device)/4
     elif args.graph_edge_generation == 'ss_sq':
+        edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
+        for i, class_i in enumerate(labels):
+            for j, class_j in enumerate(labels):
+                if class_i == class_j:
+                    edge_weight_LL[i][j] = 0.5
+        edge_weight_LU = torch.ones([25, 75]).to(args.device)/4
+        edge_weight_UU = torch.zeros([75, 75]).to(args.device)
+    elif args.graph_edge_generation == 'sq':
+        edge_weight_LL = torch.zeros([25, 25]).to(args.device)
+        edge_weight_LU = torch.ones([25, 75]).to(args.device)/2
         edge_weight_UU = torch.zeros([75, 75]).to(args.device)
         
-    edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
+    if args.graph_edge_generation == 'no_edges':
+        edge_weight = torch.ones([100,100]).to(args.device)/2
+    else:
+        edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
     
     graph_loss = torch.sum(features_distance*edge_weight)
 

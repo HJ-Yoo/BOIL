@@ -151,7 +151,7 @@ if __name__ == '__main__':
     parser.add_argument('--output-folder', type=str, default='./output/', help='Path to the output folder for saving the model (optional).')
     parser.add_argument('--save-name', type=str, default=None, help='Name of model (optional).')
     parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
-    parser.add_argument('--batch-iter', type=int, default=1200, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 1200).')
+    parser.add_argument('--batch-iter', type=int, default=600, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 1200).')
     parser.add_argument('--train-batches', type=int, default=50, help='Number of batches the model is trained over (i.e., validation save steps) (default: 50).')
     parser.add_argument('--valid-batches', type=int, default=25, help='Number of batches the model is validated over (default: 25).')
     parser.add_argument('--test-batches', type=int, default=2500, help='Number of batches the model is tested over (default: 2500).')

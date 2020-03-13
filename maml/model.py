@@ -90,13 +90,7 @@ class ScaleNet(MetaModule):
         scale = self.fc4(scale) # no relu
         scale = scale.view(scale.size(0),-1) # bs*1
         
-        return scale    
-    
-    
-
-    
-    
-    
+        return scale
     
 class GraphInput():
     def __init__(self, edge_generation_method):
