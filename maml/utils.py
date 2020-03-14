@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from maml.model import OmniglotNet, MiniimagenetNet, ScaleNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
+from maml.model import OmniglotNet, MiniimagenetNet, ScaleNet, LearningRateNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
 from torchmeta.datasets.helpers import omniglot, miniimagenet, tieredimagenet, cifar_fs, cub, doublemnist, triplemnist
 from collections import OrderedDict
 
@@ -106,6 +106,7 @@ def load_model(args):
     elif args.dataset == 'miniimagenet':
         model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size)
         scale_model = ScaleNet()
+        lr_model = LearningRateNet()
     elif args.dataset == 'tieredimagenet':
         pass
     elif args.dataset == 'cifar_fs':
@@ -117,7 +118,7 @@ def load_model(args):
     elif args.dataset == 'triplemnist':
         pass
     
-    return model, scale_model
+    return model, scale_model, lr_model
 
 def update_parameters(model, loss, step_size=0.5, first_order=False):
     """Update the parameters of the model, with one step of gradient descent.
@@ -247,3 +248,9 @@ def get_graph_regularizer(features, labels=None, model=None, args=None):
 #     penalty = torch.sum(features_dist_matrix*edge_matrix).to(args.device)*args.graph_beta
 
     return graph_loss
+
+def get_adaptive_lr(features, model):
+    adaptive_lr = model(features)
+    adaptive_lr = torch.clamp(adaptive_lr, 0.1, 1.)
+    
+    return adaptive_lr

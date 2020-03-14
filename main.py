@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from torchmeta.utils.data import BatchMetaDataLoader
-from maml.utils import load_dataset, load_model, update_parameters, get_accuracy, get_graph_regularizer
+from maml.utils import load_dataset, load_model, update_parameters, get_accuracy, get_graph_regularizer, get_adaptive_lr
     
 def main(args, mode, iteration=None):
     dataset = load_dataset(args, mode)
@@ -16,17 +16,21 @@ def main(args, mode, iteration=None):
     
     model.to(device=args.device)
     scale_model.to(device=args.device)
+    lr_model.to(device=args.device)
     model.train()
     scale_model.train()
+    lr_model.train()
     
     # To control outer update parameter
     # If you want to control inner update parameter, please see update_parameters function in ./maml/utils.py
     freeze_params = [p for name, p in model.named_parameters() if 'classifier' not in name]
     learnable_params = [p for name, p in model.named_parameters() if 'classifier' in name]
     scale_params = [p for name, p in scale_model.named_parameters()]
+    lr_params = [p for name, p in lr_model.named_parameters()]
     meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': args.meta_lr},
                                        {'params': learnable_params, 'lr': args.meta_lr},
-                                       {'params': scale_params, 'lr': args.meta_lr}]) 
+                                       {'params': scale_params, 'lr': args.meta_lr},
+                                       {'params': lr_params, 'lr': args.meta_lr}]) 
     
     if args.meta_train:
         total = args.train_batches
@@ -60,7 +64,7 @@ def main(args, mode, iteration=None):
                     initial_params=model.state_dict()
                 
                 support_features, support_logit = model(support_input)
-                if args.adaptive_lr:
+                if args.adaptive_lr and args.auto_adaptive_lr:
                     query_features_, query_logit_ = model(query_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
                 
@@ -89,6 +93,9 @@ def main(args, mode, iteration=None):
                     distance = torch.norm(torch.mean(support_features, dim=0) - torch.mean(query_features_, dim=0))
                     adaptive_lr = torch.exp(-0.1 * distance * distance)
 
+                    if args.auto_adaptive_lr:
+                        adaptive_lr= get_adaptive_lr(features=torch.cat((support_features, query_features_), dim=0), model=lr_model)
+                    
                     model.load_state_dict(initial_params)
                     model.zero_grad()
                     adaptive_params = update_parameters(model, inner_loss, step_size=adaptive_lr, first_order=args.first_order)
@@ -124,10 +131,23 @@ def main(args, mode, iteration=None):
 
     # Save model
     if args.meta_train:
-        filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models', 'epochs_{}.pt'.format((iteration+1)*total))
-        with open(filename, 'wb') as f:
+        os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models/epochs_{}'.format((iteration+1)*total)), exist_ok=True)
+        filename1 = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models', 'epochs_{}/model.pt'.format((iteration+1)*total))
+        with open(filename1, 'wb') as f:
             state_dict = model.state_dict()
             torch.save(state_dict, f)
+        if args.graph_regularizer:
+            filename2 = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models', 'epochs_{}/scale_model.pt'.format((iteration+1)*total))
+        
+            with open(filename2, 'wb') as f:
+                state_dict = scale_model.state_dict()
+                torch.save(state_dict, f)
+        if args.auto_adaptive_lr:
+            filename3 = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models', 'epochs_{}/lr_model.pt'.format((iteration+1)*total))
+        
+            with open(filename3, 'wb') as f:
+                state_dict = lr_model.state_dict()
+                torch.save(state_dict, f)
     
     return loss_logs, accuracy_logs
 
@@ -162,6 +182,7 @@ if __name__ == '__main__':
     parser.add_argument('--graph-edge-generation', type=str, default=None, help='where to get the features to make the graph')
     
     parser.add_argument('--adaptive-lr', action='store_true', help='adaptive learning rate in inner loop')
+    parser.add_argument('--auto-adaptive-lr', action='store_true', help='calculate adaptive learning rate by neural network')
     parser.add_argument('--adaptive-lr-double-inner-loop', action='store_true', help='adaptive learning rate in the second inner loop')
     parser.add_argument('--double-inner-loop', action='store_true', help='maml with twice inner loop for comparison')
 
@@ -191,7 +212,7 @@ if __name__ == '__main__':
         f.write(arguments_txt[:-1])
     
     args.device = torch.device(args.device)  
-    model, scale_model = load_model(args)
+    model, scale_model, lr_model = load_model(args)
     if args.init:
         args.num_ways = 64
         pretrained_model = load_model(args)
@@ -222,8 +243,14 @@ if __name__ == '__main__':
             valid_logs = list(logs[logs['valid_accuracy']!=0]['valid_accuracy'])
             best_valid_epochs = (valid_logs.index(max(valid_logs))+1)*50
 
-        best_valid_model = torch.load('./output/miniimagenet_{}/models/epochs_{}.pt'.format(args.save_name, best_valid_epochs))
+        best_valid_model = torch.load('./output/miniimagenet_{}/models/epochs_{}/model.pt'.format(args.save_name, best_valid_epochs))
         model.load_state_dict(best_valid_model)
+        if args.graph_regulerizer:
+            best_valid_scale_model = torch.load('./output/miniimagenet_{}/models/epochs_{}/scale_model.pt'.format(args.save_name, best_valid_epochs))
+            scale_model.load_state_dict(best_valid_scale_model)
+        if args.auto_adaptive_lr:
+            best_valid_lr_model = torch.load('./output/miniimagenet_{}/models/epochs_{}/lr_model.pt'.format(args.save_name, best_valid_epochs))
+            scale_model.load_state_dict(best_valid_lr_model)
 
         meta_test_loss_logs, meta_test_accuracy_logs = main(args=args, mode='meta_test')
         print ('loss: {}, accuracy: {}'.format(np.mean(meta_test_loss_logs), np.mean(meta_test_accuracy_logs)))

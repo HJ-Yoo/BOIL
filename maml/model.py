@@ -84,13 +84,43 @@ class ScaleNet(MetaModule):
         inputs = inputs.view(-1,64,5,5)
         scale = self.layer1(inputs)
         scale = self.layer2(scale)
-        # flatten
         scale = scale.view((scale.size(0),-1))
-        scale = F.relu(self.fc3(scale))
+        scale = F.leaky_relu(self.fc3(scale))
         scale = self.fc4(scale) # no relu
         scale = scale.view(scale.size(0),-1) # bs*1
         
         return scale
+    
+class LearningRateNet(MetaModule):
+    """Graph Construction Module"""
+    def __init__(self):
+        super(LearningRateNet, self).__init__()
+
+        self.layer1 = MetaSequential(
+            MetaConv2d(64, 64, kernel_size=3, padding=1),
+            MetaBatchNorm2d(64, momentum=1., track_running_stats=False),
+            nn.LeakyReLU(),
+            nn.MaxPool2d(2, padding=1)
+        )
+        self.layer2 = MetaSequential(
+            MetaConv2d(64, 1, kernel_size=3, padding=1),
+            MetaBatchNorm2d(1, momentum=1., track_running_stats=False),
+            nn.LeakyReLU(),
+            nn.MaxPool2d(2, padding=1)
+        )
+        self.fc3 = MetaLinear(2*2*100, 40)
+        self.fc4 = MetaLinear(40, 1)
+
+    def forward(self, inputs):
+        inputs = inputs.view(-1,64,5,5)
+        learning_rate = self.layer1(inputs)
+        learning_rate = self.layer2(learning_rate)
+        learning_rate = learning_rate.view((1,-1))
+        learning_rate = F.leaky_relu(self.fc3(learning_rate))
+        learning_rate = self.fc4(learning_rate) # no relu
+        learning_rate = torch.squeeze(learning_rate, dim=0)
+        
+        return learning_rate
     
 class GraphInput():
     def __init__(self, edge_generation_method):
