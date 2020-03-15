@@ -107,6 +107,7 @@ def load_model(args):
         model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size)
         scale_model = ScaleNet()
         lr_model = LearningRateNet()
+        
     elif args.dataset == 'tieredimagenet':
         pass
     elif args.dataset == 'cifar_fs':
@@ -172,6 +173,8 @@ def get_accuracy(logits, targets):
     _, predictions = torch.max(logits, dim=-1)
     return torch.mean(predictions.eq(targets).float())
 
+
+
 def get_graph_regularizer(features, labels=None, model=None, args=None):
     eps = np.finfo(float).eps
     scale = model(features)
@@ -202,6 +205,10 @@ def get_graph_regularizer(features, labels=None, model=None, args=None):
         edge_weight_LL = torch.zeros([25, 25]).to(args.device)
         edge_weight_LU = torch.ones([25, 75]).to(args.device)/2
         edge_weight_UU = torch.zeros([75, 75]).to(args.device)
+    elif args.graph_edge_generation == 'sq_qq':
+        edge_weight_LL = torch.zeros([25, 25]).to(args.device)
+        edge_weight_LU = torch.ones([25, 75]).to(args.device)/2
+        edge_weight_UU = torch.zeros([75, 75]).to(args.device)/4
         
     if args.graph_edge_generation == 'no_edges':
         edge_weight = torch.ones([100,100]).to(args.device)/2
@@ -246,11 +253,9 @@ def get_graph_regularizer(features, labels=None, model=None, args=None):
 #                     edge_matrix[(5*i)+k][(5*j)+l] = rank_centroid_matrix[i][j]
 
 #     penalty = torch.sum(features_dist_matrix*edge_matrix).to(args.device)*args.graph_beta
-
     return graph_loss
 
-def get_adaptive_lr(features, model):
+def get_adaptive_lr(features, model=None):
     adaptive_lr = model(features)
     adaptive_lr = torch.clamp(adaptive_lr, 0.1, 1.)
-    
     return adaptive_lr

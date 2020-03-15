@@ -61,7 +61,7 @@ class MiniimagenetNet(MetaModule):
         return features, logits
 
 class ScaleNet(MetaModule):
-    """Graph Construction Module"""
+    """Graph Construction & scale features for adaptive lr"""
     def __init__(self):
         super(ScaleNet, self).__init__()
 
@@ -88,11 +88,11 @@ class ScaleNet(MetaModule):
         scale = F.leaky_relu(self.fc3(scale))
         scale = self.fc4(scale) # no relu
         scale = scale.view(scale.size(0),-1) # bs*1
-        
         return scale
+        
     
 class LearningRateNet(MetaModule):
-    """Graph Construction Module"""
+    """auto adaptive lr"""
     def __init__(self):
         super(LearningRateNet, self).__init__()
 

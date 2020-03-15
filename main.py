@@ -64,7 +64,7 @@ def main(args, mode, iteration=None):
                     initial_params=model.state_dict()
                 
                 support_features, support_logit = model(support_input)
-                if args.adaptive_lr and args.auto_adaptive_lr:
+                if args.adaptive_lr or args.auto_adaptive_lr:
                     query_features_, query_logit_ = model(query_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
                 
@@ -90,7 +90,10 @@ def main(args, mode, iteration=None):
                     params = second_params
                 
                 elif args.adaptive_lr:
-                    distance = torch.norm(torch.mean(support_features, dim=0) - torch.mean(query_features_, dim=0))
+                    eps = np.finfo(float).eps
+                    scale = scale_model(torch.cat((support_features, query_features_), dim=0))
+                    scale_support, scale_query = scale[:25,:], scale[25:,:]
+                    distance = torch.norm(torch.mean(support_features/(scale_support+eps), dim=0) - torch.mean(query_features_/(scale_query+eps), dim=0))
                     adaptive_lr = torch.exp(-0.1 * distance * distance)
 
                     if args.auto_adaptive_lr:
