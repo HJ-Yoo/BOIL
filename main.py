@@ -64,9 +64,12 @@ def main(args, mode, iteration=None):
                     initial_params=model.state_dict()
                 
                 support_features, support_logit = model(support_input)
-                if args.adaptive_lr or args.auto_adaptive_lr:
+                if args.adaptive_lr or args.auto_adaptive_lr or args.graph_regularizer:
                     query_features_, query_logit_ = model(query_input)
-                inner_loss = F.cross_entropy(support_logit, support_target)
+                if args.graph_regularizer:
+                    graph_loss = get_graph_regularizer(features=torch.cat((support_features, query_features_), dim=0), labels=support_target, model=scale_model, args=args)
+                inner_loss = F.cross_entropy(support_logit, support_target) + args.graph_beta * graph_loss
+              
                 
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
@@ -94,7 +97,8 @@ def main(args, mode, iteration=None):
                     scale = scale_model(torch.cat((support_features, query_features_), dim=0))
                     scale_support, scale_query = scale[:25,:], scale[25:,:]
                     distance = torch.norm(torch.mean(support_features/(scale_support+eps), dim=0) - torch.mean(query_features_/(scale_query+eps), dim=0))
-                    adaptive_lr = torch.exp(-0.1 * distance * distance)
+#                     distance = F.cosine_similarity(torch.mean(support_features/(scale_support+eps), dim=0), torch.mean(query_features_/(scale_query+eps), dim=0), dim=0)
+                    adaptive_lr = torch.exp(-0.1*distance*distance)
 
                     if args.auto_adaptive_lr:
                         adaptive_lr= get_adaptive_lr(features=torch.cat((support_features, query_features_), dim=0), model=lr_model)
@@ -248,7 +252,7 @@ if __name__ == '__main__':
 
         best_valid_model = torch.load('./output/miniimagenet_{}/models/epochs_{}/model.pt'.format(args.save_name, best_valid_epochs))
         model.load_state_dict(best_valid_model)
-        if args.graph_regulerizer:
+        if args.graph_regularizer:
             best_valid_scale_model = torch.load('./output/miniimagenet_{}/models/epochs_{}/scale_model.pt'.format(args.save_name, best_valid_epochs))
             scale_model.load_state_dict(best_valid_scale_model)
         if args.auto_adaptive_lr:
