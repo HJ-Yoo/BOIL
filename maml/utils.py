@@ -177,8 +177,8 @@ def get_accuracy(logits, targets):
 
 def get_graph_regularizer(features, labels=None, model=None, args=None):
     eps = np.finfo(float).eps
-    scale = model(features)
-    features = features / (scale+eps)
+    # scale = model(features)
+    # features = features / (scale+eps)
     
     features1 = torch.unsqueeze(features, 1)
     features2 = torch.unsqueeze(features, 0)
@@ -215,7 +215,10 @@ def get_graph_regularizer(features, labels=None, model=None, args=None):
     else:
         edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
     
-    graph_loss = torch.sum(features_distance*edge_weight)
+    sq_distance = features_distance[:25,25:]
+    sq_distance = torch.min(sq_distance, dim=0)[0]
+    graph_loss = torch.sum(sq_distance)
+    # graph_loss = torch.sum(features_distance*edge_weight)
 
 #==============================================================================================================================    
 #     pairwise_distance = nn.PairwiseDistance(p=2)
