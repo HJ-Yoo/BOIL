@@ -217,7 +217,7 @@ def get_graph_regularizer(features, labels=None, model=None, args=None):
    
     graph_loss = torch.sum(features_distance*edge_weight)
     
-     if args.graph_edge_generation == 'sq_single_element'
+    if args.graph_edge_generation == 'sq_single_element':
         sq_distance = features_distance[:25,25:]
         sq_distance = torch.min(sq_distance, dim=0)[0]
         graph_loss = torch.sum(sq_distance)

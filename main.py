@@ -58,11 +58,31 @@ def main(args, mode, iteration=None):
             accuracy = torch.tensor(0., device=args.device)
             
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
-                if args.data_augmentation:
+                if args.data_augmentation=='standard_normalization':
+                    support_mean = [torch.mean(support_input[:,0,:,:]), torch.mean(support_input[:,1,:,:]), torch.mean(support_input[:,2,:,:])]
+                    support_sd = [torch.std(support_input[:,0,:,:]), torch.std(support_input[:,1,:,:]), torch.std(support_input[:,2,:,:])]
                     query_mean = [torch.mean(query_input[:,0,:,:]), torch.mean(query_input[:,1,:,:]), torch.mean(query_input[:,2,:,:])]
                     query_sd = [torch.std(query_input[:,0,:,:]), torch.std(query_input[:,1,:,:]), torch.std(query_input[:,2,:,:])]
-                    support_input = torch.cat((((support_input[:,0,:,:]-query_mean[0])/query_sd[0]).unsqueeze(1), ((support_input[:,1,:,:]-query_mean[1])/query_sd[1]).unsqueeze(1), ((support_input[:,2,:,:]-query_mean[2])/query_sd[2]).unsqueeze(1)), dim=1)
-                    query_input =  torch.cat((((query_input[:,0,:,:]-query_mean[0])/query_sd[0]).unsqueeze(1), ((query_input[:,1,:,:]-query_mean[1])/query_sd[1]).unsqueeze(1), ((query_input[:,2,:,:]-query_mean[2])/query_sd[2]).unsqueeze(1)), dim=1)
+                    unit_support_r = ((support_input[:,0,:,:]-support_mean[0])/support_sd[0])
+                    unit_support_g = ((support_input[:,1,:,:]-support_mean[1])/support_sd[1])
+                    unit_support_b = ((support_input[:,2,:,:]-support_mean[2])/support_sd[2])
+                    support_input = torch.cat((unit_support_r.unsqueeze(1), unit_support_g.unsqueeze(1), unit_support_b.unsqueeze(1)), dim=1)
+                    unit_query_r = ((query_input[:,0,:,:]-query_mean[0])/query_sd[0])
+                    unit_query_g = ((query_input[:,1,:,:]-query_mean[1])/query_sd[1])
+                    unit_query_b = ((query_input[:,2,:,:]-query_mean[2])/query_sd[2])
+                    query_input = torch.cat((unit_query_r.unsqueeze(1), unit_query_g.unsqueeze(1), unit_query_b.unsqueeze(1)), dim=1)                    
+                elif args.data_augmentation=='support_normalization':
+                    support_mean = [torch.mean(support_input[:,0,:,:]), torch.mean(support_input[:,1,:,:]), torch.mean(support_input[:,2,:,:])]
+                    support_sd = [torch.std(support_input[:,0,:,:]), torch.std(support_input[:,1,:,:]), torch.std(support_input[:,2,:,:])]
+                    query_mean = [torch.mean(query_input[:,0,:,:]), torch.mean(query_input[:,1,:,:]), torch.mean(query_input[:,2,:,:])]
+                    query_sd = [torch.std(query_input[:,0,:,:]), torch.std(query_input[:,1,:,:]), torch.std(query_input[:,2,:,:])]
+                    unit_support_r = ((support_input[:,0,:,:]-support_mean[0])/support_sd[0])
+                    unit_support_g = ((support_input[:,1,:,:]-support_mean[1])/support_sd[1])
+                    unit_support_b = ((support_input[:,2,:,:]-support_mean[2])/support_sd[2])
+                    support_input_r = unit_support_r * query_sd[0] + query_mean[0]
+                    support_input_g = unit_support_g * query_sd[1] + query_mean[1]
+                    support_input_b = unit_support_b * query_sd[2] + query_mean[2]
+                    support_input = torch.cat((support_input_r.unsqueeze(1), support_input_g.unsqueeze(1), support_input_b.unsqueeze(1)), dim=1)
                     
                 # inner loop
                 model.train()
