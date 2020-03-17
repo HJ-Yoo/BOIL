@@ -214,11 +214,13 @@ def get_graph_regularizer(features, labels=None, model=None, args=None):
         edge_weight = torch.ones([100,100]).to(args.device)/2
     else:
         edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
+   
+    graph_loss = torch.sum(features_distance*edge_weight)
     
-    sq_distance = features_distance[:25,25:]
-    sq_distance = torch.min(sq_distance, dim=0)[0]
-    graph_loss = torch.sum(sq_distance)
-    # graph_loss = torch.sum(features_distance*edge_weight)
+     if args.graph_edge_generation == 'sq_single_element'
+        sq_distance = features_distance[:25,25:]
+        sq_distance = torch.min(sq_distance, dim=0)[0]
+        graph_loss = torch.sum(sq_distance)
 
 #==============================================================================================================================    
 #     pairwise_distance = nn.PairwiseDistance(p=2)
