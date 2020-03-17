@@ -58,6 +58,12 @@ def main(args, mode, iteration=None):
             accuracy = torch.tensor(0., device=args.device)
             
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
+                if args.data_augmentation:
+                    query_mean = [torch.mean(query_input[:,0,:,:]), torch.mean(query_input[:,1,:,:]), torch.mean(query_input[:,2,:,:])]
+                    query_sd = [torch.std(query_input[:,0,:,:]), torch.std(query_input[:,1,:,:]), torch.std(query_input[:,2,:,:])]
+                    support_input = torch.cat((((support_input[:,0,:,:]-query_mean[0])/query_sd[0]).unsqueeze(1), ((support_input[:,1,:,:]-query_mean[1])/query_sd[1]).unsqueeze(1), ((support_input[:,2,:,:]-query_mean[2])/query_sd[2]).unsqueeze(1)), dim=1)
+                    query_input =  torch.cat((((query_input[:,0,:,:]-query_mean[0])/query_sd[0]).unsqueeze(1), ((query_input[:,1,:,:]-query_mean[1])/query_sd[1]).unsqueeze(1), ((query_input[:,2,:,:]-query_mean[2])/query_sd[2]).unsqueeze(1)), dim=1)
+                    
                 # inner loop
                 model.train()
                 if args.adaptive_lr:
@@ -68,7 +74,7 @@ def main(args, mode, iteration=None):
                     query_features_, query_logit_ = model(query_input)
                 if args.graph_regularizer:
                     graph_loss = get_graph_regularizer(features=torch.cat((support_features, query_features_), dim=0), labels=support_target, model=scale_model, args=args)
-                inner_loss = F.cross_entropy(support_logit, support_target) + args.graph_beta * graph_loss
+                inner_loss = F.cross_entropy(support_logit, support_target)
               
                 
                 model.zero_grad()
@@ -192,6 +198,8 @@ if __name__ == '__main__':
     parser.add_argument('--auto-adaptive-lr', action='store_true', help='calculate adaptive learning rate by neural network')
     parser.add_argument('--adaptive-lr-double-inner-loop', action='store_true', help='adaptive learning rate in the second inner loop')
     parser.add_argument('--double-inner-loop', action='store_true', help='maml with twice inner loop for comparison')
+    
+    parser.add_argument('--data-augmentation', action='store_true', help='data augmentation')
 
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
     parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
