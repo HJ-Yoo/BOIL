@@ -38,24 +38,22 @@ class OmniglotNet(MetaModule):
         return features, logits
 
 class MiniimagenetNet(MetaModule):
-    def __init__(self, in_channels, out_features, hidden_size, task_embedding_method, edge_generation_method):
-        super(MiniimagenetNet, self).__init__()
-        torch.manual_seed(2020)
-        
+    def __init__(self, in_channels, out_features, hidden_size):
+        super(MiniimagenetNet, self).__init__()        
         self.in_channels = in_channels
         self.out_features = out_features
         self.hidden_size = hidden_size
-        self.task_embedding_method = task_embedding_method
+        
         self.features = MetaSequential(
-            conv3x3(in_channels, 64),
-            conv3x3(64, 64),
-            conv3x3(64, 64),
-            conv3x3(64, 64)
+            conv3x3(in_channels, hidden_size),
+            conv3x3(hidden_size, hidden_size),
+            conv3x3(hidden_size, hidden_size),
+            conv3x3(hidden_size, hidden_size)
         )
         
-        self.classifier = MetaLinear(64*5*5, out_features)
-        
-    def forward(self, inputs, task_idx=None, update_mode=None, params=None):
+        self.classifier = MetaLinear(hidden_size*5*5, out_features)
+                
+    def forward(self, inputs, params=None):
         features = self.features(inputs, params=get_subdict(params, 'features'))
         features = features.view((features.size(0), -1))
         logits = self.classifier(features, params=get_subdict(params, 'classifier'))

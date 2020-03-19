@@ -103,7 +103,7 @@ def load_model(args):
     if args.dataset == 'omniglot':
         model = OmniglotNet(1, args.num_ways, hidden_size=args.hidden_size)
     elif args.dataset == 'miniimagenet':
-        model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size, task_embedding_method=args.task_embedding_method, edge_generation_method=args.edge_generation_method)
+        model = MiniimagenetNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size)
     elif args.dataset == 'tieredimagenet':
         pass
     elif args.dataset == 'cifar_fs':
@@ -117,7 +117,7 @@ def load_model(args):
     
     return model
 
-def update_parameters(model, loss, step_size=0.5, first_order=False):
+def update_parameters(model, loss, extractor_step_size, classifier_step_size, first_order=False):
     """Update the parameters of the model, with one step of gradient descent.
 
     Parameters
@@ -143,9 +143,9 @@ def update_parameters(model, loss, step_size=0.5, first_order=False):
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
         if 'classifier' in name: # To control inner update parameter
-            params[name] = param # - step_size * grad
+            params[name] = param - classifier_step_size * grad
         else:
-            params[name] = param - step_size * grad # params[name] = param
+            params[name] = param - extractor_step_size * grad # params[name] = param
     
     return params
 
