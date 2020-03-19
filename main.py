@@ -51,6 +51,7 @@ def main(args, mode, iteration=None):
             
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 model.train()
+                                
                 support_features, support_logit = model(support_input)
                 if args.inner_distance_weight: # args.meta_train
                     query_features, query_logit = model(query_input)
@@ -73,12 +74,21 @@ def main(args, mode, iteration=None):
                 query_features, query_logit = model(query_input, params=params)
                 if args.distance_weight:
                     support_features, support_logit = model(support_input, params=params)
-                    distance = torch.norm(torch.mean(support_features, dim=0)-torch.mean(query_features, dim=0))
-                    distance_weight = torch.exp(-0.1 * distance * distance).item()
-                    outer_loss += (1-distance_weight)*F.cross_entropy(query_logit, query_target)
+                    support_features = support_features.detach()
+                    
+                    pairwise_distance = nn.PairwiseDistance(p=2)
+                    graph_regularizer = torch.tensor(0., device=args.device)
+    
+                    for i in range(len(query_features)):
+                        min_distance = torch.min(pairwise_distance(query_features[i].view(1, -1), support_features))
+                        if min_distance > 0.001:
+                            graph_regularizer += torch.min(pairwise_distance(query_features[i].view(1, -1), support_features))
+                    graph_regularizer = graph_regularizer / len(query_features)
+                    outer_loss += F.cross_entropy(query_logit, query_target) + 0.01 * graph_regularizer
                 else:
                     outer_loss += F.cross_entropy(query_logit, query_target) # + 0.001 * torch.mean(torch.norm(support_features, p=1, dim=1))
-                                   
+                
+                
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
                     
