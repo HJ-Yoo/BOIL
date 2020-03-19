@@ -94,9 +94,10 @@ if __name__ == '__main__':
     import argparse
     
     parser = argparse.ArgumentParser('Model-Agnostic Meta-Learning (MAML)')
-
+    
     parser.add_argument('--folder', type=str, help='Path to the folder the data is downloaded to.')
-    parser.add_argument('--dataset', type=str, help='Dataset: omniglot, miniimagenet, tieredimagenet, cifar_fs, cub, doublemnist, triplemnist')
+    parser.add_argument('--dataset', type=str, help='Dataset: miniimagenet, tieredimagenet, cifar_fs, fc100')
+    parser.add_argument('--model', type=str, help='Model: smallconv, largeconv, resnet')
     parser.add_argument('--device', type=str, default='cuda:0', help='gpu device')
     parser.add_argument('--download', action='store_true', help='Download the dataset in the data folder.')
     parser.add_argument('--num-shots', type=int, default=5, help='Number of examples per class (k in "k-shot", default: 5).')
@@ -111,8 +112,8 @@ if __name__ == '__main__':
     parser.add_argument('--output-folder', type=str, default='./output/', help='Path to the output folder for saving the model (optional).')
     parser.add_argument('--save-name', type=str, default=None, help='Name of model (optional).')
     parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
-    parser.add_argument('--batch-iter', type=int, default=1200, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 1200).')
-    parser.add_argument('--train-batches', type=int, default=50, help='Number of batches the model is trained over (i.e., validation save steps) (default: 50).')
+    parser.add_argument('--batch-iter', type=int, default=600, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 600).')
+    parser.add_argument('--train-batches', type=int, default=100, help='Number of batches the model is trained over (i.e., validation save steps) (default: 100).')
     parser.add_argument('--valid-batches', type=int, default=25, help='Number of batches the model is validated over (default: 25).')
     parser.add_argument('--test-batches', type=int, default=2500, help='Number of batches the model is tested over (default: 2500).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')

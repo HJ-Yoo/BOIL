@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from maml.model import OmniglotNet, MiniimagenetNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
-from torchmeta.datasets.helpers import omniglot, miniimagenet, tieredimagenet, cifar_fs, cub, doublemnist, triplemnist
+from maml.model import ConvNet
+from torchmeta.datasets.helpers import miniimagenet, tieredimagenet, cifar_fs, fc100
 from collections import OrderedDict
 
 def load_dataset(args, mode):
@@ -26,17 +26,7 @@ def load_dataset(args, mode):
         args.meta_val = False
         args.meta_test = True
     
-    if args.dataset == 'omniglot':
-        dataset = omniglot(folder=folder,
-                           shots=shots,
-                           ways=ways,
-                           shuffle=shuffle,
-                           test_shots=test_shots,
-                           meta_train=args.meta_train,
-                           meta_val=args.meta_val,
-                           meta_test=args.meta_test,
-                           download=download)
-    elif args.dataset == 'miniimagenet':
+    if args.dataset == 'miniimagenet':
         dataset = miniimagenet(folder=folder,
                                shots=shots,
                                ways=ways,
@@ -66,55 +56,28 @@ def load_dataset(args, mode):
                            meta_val=args.meta_val,
                            meta_test=args.meta_test,
                            download=download)
-    elif args.dataset == 'cub':
-        dataset = cub(folder=folder,
-                      shots=shots,
-                      ways=ways,
-                      shuffle=shuffle,
-                      test_shots=test_shots,
-                      meta_train=args.meta_train,
-                      meta_val=args.meta_val,
-                      meta_test=args.meta_test,
-                      download=download)
-    elif args.dataset == 'doublemnist':
-        dataset = doublemnist(folder=folder,
-                              shots=shots,
-                              ways=ways,
-                              shuffle=shuffle,
-                              test_shots=test_shots,
-                              meta_train=args.meta_train,
-                              meta_val=args.meta_val,
-                              meta_test=args.meta_test,
-                              download=download)
-    elif args.dataset == 'triplemnist':
-        dataset = triplemnist(folder=folder,
-                              shots=shots,
-                              ways=ways,
-                              shuffle=shuffle,
-                              test_shots=test_shots,
-                              meta_train=args.meta_train,
-                              meta_val=args.meta_val,
-                              meta_test=args.meta_test,
-                              download=download)
-    
+    elif args.dataset == 'fc100':
+        dataset = fc100(folder=folder,
+                        shots=shots,
+                        ways=ways,
+                        shuffle=shuffle,
+                        test_shots=test_shots,
+                        meta_train=args.meta_train,
+                        meta_val=args.meta_val,
+                        meta_test=args.meta_test,
+                        download=download)
     return dataset
 
 def load_model(args):
-    if args.dataset == 'omniglot':
-        model = OmniglotNet(1, args.num_ways, hidden_size=args.hidden_size)
-    elif args.dataset == 'miniimagenet':
-        model = MiniimagenetNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size)
-    elif args.dataset == 'tieredimagenet':
-        pass
-    elif args.dataset == 'cifar_fs':
-        pass
-    elif args.dataset == 'cub':
-        pass
-    elif args.dataset == 'doublemnist':
-        pass
-    elif args.dataset == 'triplemnist':
-        pass
-    
+    if args.dataset == 'miniimagenet' or args.dataset == 'tieredimagenet':
+        wh_size = 5
+    elif args.dataset == 'cifar_fs' or args.dataset == 'fc100':
+        wh_size = 2
+        
+    if args.model == 'smallconv' or args.model == 'largeconv':
+        model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, model_size=args.model, wh_size=wh_size)
+    elif args.model == 'resnet':
+        model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, model_size=args.model, wh_size=wh_size) # ResNet 으로 수정
     return model
 
 def update_parameters(model, loss, extractor_step_size, classifier_step_size, first_order=False):
