@@ -15,22 +15,18 @@ def main(args, mode, iteration=None):
     dataloader = BatchMetaDataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     
     model.to(device=args.device)
-    scale_model.to(device=args.device)
-    lr_model.to(device=args.device)
     model.train()
-    scale_model.train()
-    lr_model.train()
     
     # To control outer update parameter
     # If you want to control inner update parameter, please see update_parameters function in ./maml/utils.py
     freeze_params = [p for name, p in model.named_parameters() if 'classifier' not in name]
     learnable_params = [p for name, p in model.named_parameters() if 'classifier' in name]
-    scale_params = [p for name, p in scale_model.named_parameters()]
-    lr_params = [p for name, p in lr_model.named_parameters()]
+    # scale_params = [p for name, p in scale_model.named_parameters()]
+    # lr_params = [p for name, p in lr_model.named_parameters()]
     meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': args.meta_lr},
-                                       {'params': learnable_params, 'lr': args.meta_lr},
-                                       {'params': scale_params, 'lr': args.meta_lr},
-                                       {'params': lr_params, 'lr': args.meta_lr}]) 
+                                       {'params': learnable_params, 'lr': args.meta_lr}])
+                                       # {'params': scale_params, 'lr': args.meta_lr},
+                                       # {'params': lr_params, 'lr': args.meta_lr}]) 
     
     if args.meta_train:
         total = args.train_batches
@@ -60,28 +56,28 @@ def main(args, mode, iteration=None):
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
                 if args.data_augmentation=='standard_normalization':
                     support_mean = [torch.mean(support_input[:,0,:,:]), torch.mean(support_input[:,1,:,:]), torch.mean(support_input[:,2,:,:])]
-                    support_sd = [torch.std(support_input[:,0,:,:]), torch.std(support_input[:,1,:,:]), torch.std(support_input[:,2,:,:])]
+                    support_std = [torch.std(support_input[:,0,:,:]), torch.std(support_input[:,1,:,:]), torch.std(support_input[:,2,:,:])]
                     query_mean = [torch.mean(query_input[:,0,:,:]), torch.mean(query_input[:,1,:,:]), torch.mean(query_input[:,2,:,:])]
-                    query_sd = [torch.std(query_input[:,0,:,:]), torch.std(query_input[:,1,:,:]), torch.std(query_input[:,2,:,:])]
-                    unit_support_r = ((support_input[:,0,:,:]-support_mean[0])/support_sd[0])
-                    unit_support_g = ((support_input[:,1,:,:]-support_mean[1])/support_sd[1])
-                    unit_support_b = ((support_input[:,2,:,:]-support_mean[2])/support_sd[2])
+                    query_std = [torch.std(query_input[:,0,:,:]), torch.std(query_input[:,1,:,:]), torch.std(query_input[:,2,:,:])]
+                    unit_support_r = ((support_input[:,0,:,:]-support_mean[0])/support_std[0])
+                    unit_support_g = ((support_input[:,1,:,:]-support_mean[1])/support_std[1])
+                    unit_support_b = ((support_input[:,2,:,:]-support_mean[2])/support_std[2])
                     support_input = torch.cat((unit_support_r.unsqueeze(1), unit_support_g.unsqueeze(1), unit_support_b.unsqueeze(1)), dim=1)
-                    unit_query_r = ((query_input[:,0,:,:]-query_mean[0])/query_sd[0])
-                    unit_query_g = ((query_input[:,1,:,:]-query_mean[1])/query_sd[1])
-                    unit_query_b = ((query_input[:,2,:,:]-query_mean[2])/query_sd[2])
-                    query_input = torch.cat((unit_query_r.unsqueeze(1), unit_query_g.unsqueeze(1), unit_query_b.unsqueeze(1)), dim=1)                    
+                    unit_query_r = ((query_input[:,0,:,:]-query_mean[0])/query_std[0])
+                    unit_query_g = ((query_input[:,1,:,:]-query_mean[1])/query_std[1])
+                    unit_query_b = ((query_input[:,2,:,:]-query_mean[2])/query_std[2])
+                    query_input = torch.cat((unit_query_r.unsqueeze(1), unit_query_g.unsqueeze(1), unit_query_b.unsqueeze(1)), dim=1)  
                 elif args.data_augmentation=='support_normalization':
                     support_mean = [torch.mean(support_input[:,0,:,:]), torch.mean(support_input[:,1,:,:]), torch.mean(support_input[:,2,:,:])]
-                    support_sd = [torch.std(support_input[:,0,:,:]), torch.std(support_input[:,1,:,:]), torch.std(support_input[:,2,:,:])]
+                    support_std = [torch.std(support_input[:,0,:,:]), torch.std(support_input[:,1,:,:]), torch.std(support_input[:,2,:,:])]
                     query_mean = [torch.mean(query_input[:,0,:,:]), torch.mean(query_input[:,1,:,:]), torch.mean(query_input[:,2,:,:])]
-                    query_sd = [torch.std(query_input[:,0,:,:]), torch.std(query_input[:,1,:,:]), torch.std(query_input[:,2,:,:])]
-                    unit_support_r = ((support_input[:,0,:,:]-support_mean[0])/support_sd[0])
-                    unit_support_g = ((support_input[:,1,:,:]-support_mean[1])/support_sd[1])
-                    unit_support_b = ((support_input[:,2,:,:]-support_mean[2])/support_sd[2])
-                    support_input_r = unit_support_r * query_sd[0] + query_mean[0]
-                    support_input_g = unit_support_g * query_sd[1] + query_mean[1]
-                    support_input_b = unit_support_b * query_sd[2] + query_mean[2]
+                    query_std = [torch.std(query_input[:,0,:,:]), torch.std(query_input[:,1,:,:]), torch.std(query_input[:,2,:,:])]
+                    unit_support_r = ((support_input[:,0,:,:]-support_mean[0])/support_std[0])
+                    unit_support_g = ((support_input[:,1,:,:]-support_mean[1])/support_std[1])
+                    unit_support_b = ((support_input[:,2,:,:]-support_mean[2])/support_std[2])
+                    support_input_r = unit_support_r * query_std[0] + query_mean[0]
+                    support_input_g = unit_support_g * query_std[1] + query_mean[1]
+                    support_input_b = unit_support_b * query_std[2] + query_mean[2]
                     support_input = torch.cat((support_input_r.unsqueeze(1), support_input_g.unsqueeze(1), support_input_b.unsqueeze(1)), dim=1)
                     
                 # inner loop
@@ -92,10 +88,12 @@ def main(args, mode, iteration=None):
                 support_features, support_logit = model(support_input)
                 if args.adaptive_lr or args.auto_adaptive_lr or args.graph_regularizer:
                     query_features_, query_logit_ = model(query_input)
-                if args.graph_regularizer:
-                    graph_loss = get_graph_regularizer(features=torch.cat((support_features, query_features_), dim=0), labels=support_target, model=scale_model, args=args)
+                
                 inner_loss = F.cross_entropy(support_logit, support_target)
-              
+                
+                if args.graph_regularizer:
+                    graph_loss = get_graph_regularizer(features=torch.cat((support_features, query_features_), dim=0), labels=[support_target, query_target], args=args)
+                    inner_loss += args.graph_beta * graph_loss
                 
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, step_size=args.step_size, first_order=args.first_order)
@@ -140,10 +138,10 @@ def main(args, mode, iteration=None):
                     
                 query_features, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
-                if args.graph_regularizer:
-                    support_features_, support_logit_ = model(support_input, params=params)
-                    graph_loss = get_graph_regularizer(features=torch.cat((support_features_, query_features), dim=0), labels=support_target, model=scale_model, args=args)
-                    outer_loss += args.graph_beta * graph_loss
+#                 if args.graph_regularizer:
+#                     support_features_, support_logit_ = model(support_input, params=params)
+#                     graph_loss = get_graph_regularizer(features=torch.cat((support_features_, query_features), dim=0), labels=[support_target, query_target], model=scale_model, args=args)
+#                     outer_loss += (args.graph_beta * graph_loss)
                 
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
@@ -169,12 +167,12 @@ def main(args, mode, iteration=None):
         with open(filename1, 'wb') as f:
             state_dict = model.state_dict()
             torch.save(state_dict, f)
-        if args.graph_regularizer:
-            filename2 = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models', 'epochs_{}/scale_model.pt'.format((iteration+1)*total))
+#         if args.graph_regularizer:
+#             filename2 = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models', 'epochs_{}/scale_model.pt'.format((iteration+1)*total))
         
-            with open(filename2, 'wb') as f:
-                state_dict = scale_model.state_dict()
-                torch.save(state_dict, f)
+#             with open(filename2, 'wb') as f:
+#                 state_dict = scale_model.state_dict()
+#                 torch.save(state_dict, f)
         if args.auto_adaptive_lr:
             filename3 = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models', 'epochs_{}/lr_model.pt'.format((iteration+1)*total))
         
@@ -205,7 +203,7 @@ if __name__ == '__main__':
     parser.add_argument('--save-name', type=str, default=None, help='Name of model (optional).')
     parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
     parser.add_argument('--batch-iter', type=int, default=600, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 1200).')
-    parser.add_argument('--train-batches', type=int, default=50, help='Number of batches the model is trained over (i.e., validation save steps) (default: 50).')
+    parser.add_argument('--train-batches', type=int, default=100, help='Number of batches the model is trained over (i.e., validation save steps) (default: 50).')
     parser.add_argument('--valid-batches', type=int, default=25, help='Number of batches the model is validated over (default: 25).')
     parser.add_argument('--test-batches', type=int, default=2500, help='Number of batches the model is tested over (default: 2500).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
@@ -219,9 +217,10 @@ if __name__ == '__main__':
     parser.add_argument('--adaptive-lr-double-inner-loop', action='store_true', help='adaptive learning rate in the second inner loop')
     parser.add_argument('--double-inner-loop', action='store_true', help='maml with twice inner loop for comparison')
     
-    parser.add_argument('--data-augmentation', action='store_true', help='data augmentation')
+    parser.add_argument('--data-augmentation', type=str, default=None, help='data augmention method')
 
     parser.add_argument('--graph-regularizer', action='store_true', help='graph regularizer')
+    parser.add_argument('--graph-feature-scale', action='store_true', help='graph feature scale')
     parser.add_argument('--fc-regularizer', action='store_true', help='fully connected layer regularizer')
     parser.add_argument('--distance-regularizer', action='store_true', help='distance regularizer')
     parser.add_argument('--distance-lambda', type=float, default=1.0, help='modulate the magnitude of distance regularizer')
@@ -247,7 +246,7 @@ if __name__ == '__main__':
         f.write(arguments_txt[:-1])
     
     args.device = torch.device(args.device)  
-    model, scale_model, lr_model = load_model(args)
+    model = load_model(args)
     if args.init:
         args.num_ways = 64
         pretrained_model = load_model(args)

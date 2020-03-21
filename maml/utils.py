@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 
 from maml.model import OmniglotNet, MiniimagenetNet, ScaleNet, LearningRateNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
@@ -105,8 +106,6 @@ def load_model(args):
         model = OmniglotNet(1, args.num_ways, hidden_size=args.hidden_size)
     elif args.dataset == 'miniimagenet':
         model = MiniimagenetNet(3, args.num_ways, hidden_size=args.hidden_size)
-        scale_model = ScaleNet()
-        lr_model = LearningRateNet()
         
     elif args.dataset == 'tieredimagenet':
         pass
@@ -119,7 +118,7 @@ def load_model(args):
     elif args.dataset == 'triplemnist':
         pass
     
-    return model, scale_model, lr_model
+    return model
 
 def update_parameters(model, loss, step_size=0.5, first_order=False):
     """Update the parameters of the model, with one step of gradient descent.
@@ -147,7 +146,7 @@ def update_parameters(model, loss, step_size=0.5, first_order=False):
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
         if 'classifier' in name: # To control inner update parameter
-            params[name] = param - step_size * grad
+            params[name] = param # - step_size * grad
         else:
             params[name] = param - step_size * grad # params[name] = param
 
@@ -177,50 +176,61 @@ def get_accuracy(logits, targets):
 
 def get_graph_regularizer(features, labels=None, model=None, args=None):
     eps = np.finfo(float).eps
-    # scale = model(features)
-    # features = features / (scale+eps)
+#     if args.graph_feature_scale:
+#         scale = model(features)
+#         features = features / (scale+eps)
+    support_features = features[:args.num_ways*args.num_shots,:]
+    query_features = features[args.num_ways*args.num_shots:,:]
+    support_labels = labels[0]
+    query_labels = labels[1]
     
-    features1 = torch.unsqueeze(features, 1)
-    features2 = torch.unsqueeze(features, 0)
-    features_distance = torch.mean((features1-features2)**2, dim=2)
-    features_distance = torch.exp(-features_distance/2)
-
-    if args.graph_edge_generation == 'ss_sq_qq':
-        edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
-        for i, class_i in enumerate(labels):
-            for j, class_j in enumerate(labels):
-                if class_i == class_j:
-                    edge_weight_LL[i][j] = 0.5
-        edge_weight_LU = torch.ones([25, 75]).to(args.device)/4
-        edge_weight_UU = torch.ones([75, 75]).to(args.device)/4
-    elif args.graph_edge_generation == 'ss_sq':
-        edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
-        for i, class_i in enumerate(labels):
-            for j, class_j in enumerate(labels):
-                if class_i == class_j:
-                    edge_weight_LL[i][j] = 0.5
-        edge_weight_LU = torch.ones([25, 75]).to(args.device)/4
-        edge_weight_UU = torch.zeros([75, 75]).to(args.device)
-    elif args.graph_edge_generation == 'sq':
-        edge_weight_LL = torch.zeros([25, 25]).to(args.device)
-        edge_weight_LU = torch.ones([25, 75]).to(args.device)/2
-        edge_weight_UU = torch.zeros([75, 75]).to(args.device)
-    elif args.graph_edge_generation == 'sq_qq':
-        edge_weight_LL = torch.zeros([25, 25]).to(args.device)
-        edge_weight_LU = torch.ones([25, 75]).to(args.device)/2
-        edge_weight_UU = torch.zeros([75, 75]).to(args.device)/4
-        
-    if args.graph_edge_generation == 'no_edges':
-        edge_weight = torch.ones([100,100]).to(args.device)/2
-    else:
-        edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
-   
-    graph_loss = torch.sum(features_distance*edge_weight)
+    distance = torch.zeros([len(support_labels), len(query_labels)]).to(args.device)
     
-    if args.graph_edge_generation == 'sq_single_element':
-        sq_distance = features_distance[:25,25:]
-        sq_distance = torch.min(sq_distance, dim=0)[0]
-        graph_loss = torch.sum(sq_distance)
+    for i, class_i in enumerate(support_labels):
+        for j, class_j in enumerate(query_labels):
+            if class_i == class_j:
+                distance[i][j] = torch.dist(support_features[i], query_features[j])
+    graph_loss = torch.sum(distance)
+    
+#     if args.graph_edge_generation == 'no_edges':
+#         edge_weight = torch.ones([100,100]).to(args.device)/2
+#         graph_loss = torch.sum(features_distance*edge_weight)
+#     elif args.graph_edge_generation == 'ss_sq_qq':
+#         edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
+#         for i, class_i in enumerate(labels):
+#             for j, class_j in enumerate(labels):
+#                 if class_i == class_j:
+#                     edge_weight_LL[i][j] = 0.5
+#         edge_weight_LU = torch.ones([25, 75]).to(args.device)/2
+#         edge_weight_UU = torch.ones([75, 75]).to(args.device)/4
+#         edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
+#         graph_loss = torch.sum(features_distance*edge_weight)
+#     elif args.graph_edge_generation == 'ss_sq':
+#         edge_weight_LL = torch.zeros([len(labels), len(labels)]).to(args.device)
+#         for i, class_i in enumerate(labels):
+#             for j, class_j in enumerate(labels):
+#                 if class_i == class_j:
+#                     edge_weight_LL[i][j] = 0.5
+#         edge_weight_LU = torch.ones([25, 75]).to(args.device)/2
+#         edge_weight_UU = torch.zeros([75, 75]).to(args.device)
+#         edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
+#         graph_loss = torch.sum(features_distance*edge_weight)
+#     elif args.graph_edge_generation == 'sq':
+#         edge_weight_LL = torch.zeros([5, 5]).to(args.device)
+#         edge_weight_LU = torch.ones([5, 75]).to(args.device)/2
+#         edge_weight_UU = torch.zeros([75, 75]).to(args.device)
+#         edge_weight = torch.cat((torch.cat((edge_weight_LL, edge_weight_LU/(5*75)), dim=1),torch.cat((edge_weight_LU.t()/(5*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
+#         graph_loss = torch.sum(features_distance*edge_weight)
+#     elif args.graph_edge_generation == 'sq_qq':
+#         edge_weight_LL = torch.zeros([25, 25]).to(args.device)
+#         edge_weight_LU = torch.ones([25, 75]).to(args.device)/2
+#         edge_weight_UU = torch.zeros([75, 75]).to(args.device)/4
+#         edge_weight = torch.cat((torch.cat((edge_weight_LL/(25*25), edge_weight_LU/(25*75)), dim=1),torch.cat((edge_weight_LU.t()/(25*75), edge_weight_UU/(75*75)), dim=1)), dim=0).to(args.device)
+#         graph_loss = torch.sum(features_distance*edge_weight)
+#     elif args.graph_edge_generation == 'sq_single_element':
+#         sq_distance = features_distance[:25,25:]
+#         sq_distance = torch.min(sq_distance, dim=0)[0]
+#         graph_loss = torch.sum(sq_distance)
 
 #==============================================================================================================================    
 #     pairwise_distance = nn.PairwiseDistance(p=2)
