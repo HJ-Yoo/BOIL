@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from maml.model import ConvNet
+from maml.model import ConvNet, BasicBlock, ResNet
 from torchmeta.datasets.helpers import miniimagenet, tieredimagenet, cifar_fs, fc100
 from collections import OrderedDict
 
@@ -77,7 +77,7 @@ def load_model(args):
     if args.model == 'smallconv' or args.model == 'largeconv':
         model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, model_size=args.model, wh_size=wh_size)
     elif args.model == 'resnet':
-        model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, model_size=args.model, wh_size=wh_size) # ResNet 으로 수정
+        model = ResNet(block=BasicBlock, keep_prob=1.0, avg_pool=True)
     return model
 
 def update_parameters(model, loss, extractor_step_size, classifier_step_size, first_order=False):
