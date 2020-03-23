@@ -54,6 +54,12 @@ def main(args, mode, iteration=None):
                 
                 support_features, support_logit = model(support_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
+                if args.graph_regularizer:
+                    _query_features, _query_logit = model(query_input)
+                    features = torch.cat((support_features, _query_features), dim=0)
+                    labels = [support_target, query_target]
+                    graph_loss = get_graph_regularizer(features=features, labels=labels, args=args)
+                    inner_loss += graph_loss * args.graph_beta
                     
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, extractor_step_size=args.extractor_step_size, classifier_step_size=args.classifier_step_size, first_order=args.first_order)
@@ -118,6 +124,10 @@ if __name__ == '__main__':
     parser.add_argument('--test-batches', type=int, default=2500, help='Number of batches the model is tested over (default: 2500).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
         
+    parser.add_argument('--graph-regularizer', action='store_true', help='classwise graph regularizer init')
+    parser.add_argument('--graph-beta', type=float, default=1e-2, help='Hyperparameter for controlling graph loss.')
+    parser.add_argument('--graph-type', type=str, default='single', help='How to calculate graph loss')
+    
     parser.add_argument('--init', action='store_true', help='extractor init')
         
     args = parser.parse_args()  
