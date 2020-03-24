@@ -141,16 +141,17 @@ def get_graph_regularizer(features, labels=None, args=None):
     
     distance = torch.zeros([len(support_labels), len(query_labels)]).to(args.device)
     if args.graph_type=='single':
-        for i, class_i in enumerate(support_labels):
+        for j, class_j in enumerate(query_labels):
             dist = []
-            for j, class_j in enumerate(query_labels):
+            for i, class_i in enumerate(support_labels):
                 if class_i == class_j:
                     dist.append(torch.dist(support_features[i], query_features[j]))
-            distance[i][dist.index(min(dist))] = min(dist)
+            distance[dist.index(min(dist))][j] = min(dist)
     elif args.graph_type=='all':
         for i, class_i in enumerate(support_labels):
             for j, class_j in enumerate(query_labels):
                 distance[i][j] = torch.dist(support_features[i], query_features[j])
+                distance = distance/15
     
     graph_loss = torch.sum(distance)
     
