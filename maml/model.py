@@ -174,7 +174,7 @@ class BasicBlock(MetaModule):
 
 
 class ResNet(MetaModule):
-    def __init__(self, block, keep_prob=1.0, avg_pool=False, drop_rate=0.0, dropblock_size=5):
+    def __init__(self, block, keep_prob=1.0, avg_pool=False, drop_rate=0.0, dropblock_size=5, out_features=5, wh_size=None):
         self.inplanes = 3
         super(ResNet, self).__init__()
 
@@ -189,7 +189,7 @@ class ResNet(MetaModule):
         self.dropout = nn.Dropout(p=1 - self.keep_prob, inplace=False)
         self.drop_rate = drop_rate
         
-        self.classifier = MetaLinear(512, 5)
+        self.classifier = MetaLinear(512*wh_size*wh_size, out_features)
         
         for m in self.modules():
             if isinstance(m, MetaConv2d):

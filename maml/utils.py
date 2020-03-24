@@ -77,7 +77,7 @@ def load_model(args):
     if args.model == 'smallconv' or args.model == 'largeconv':
         model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, model_size=args.model, wh_size=wh_size)
     elif args.model == 'resnet':
-        model = ResNet(block=BasicBlock, keep_prob=1.0, avg_pool=True)
+        model = ResNet(block=BasicBlock, keep_prob=1.0, avg_pool=True, out_features=args.num_ways, wh_size=1)
     return model
 
 def update_parameters(model, loss, extractor_step_size, classifier_step_size, first_order=False):
