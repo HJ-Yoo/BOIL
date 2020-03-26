@@ -223,37 +223,3 @@ class ResNet(MetaModule):
         features = x.view((x.size(0), -1))
         logits = self.classifier(self.dropout(features), params=get_subdict(params, 'classifier'))
         return features, logits
-    
-"""
-class GraphInput():
-    def __init__(self, edge_generation_method):
-        self.edge_generation_method = edge_generation_method
-        if self.edge_generation_method == 'max_normalization':
-            self.max_norm = 0.
-        elif self.edge_generation_method == 'weighted_max_normalization':
-            self.weighted_max_norm = 0.
-            self.task_num = 0
-        
-    def get_graph_inputs(self, features):
-        euclidean_matrix = torch.cdist(features, features)
-        if self.edge_generation_method == 'max_normalization':
-            current_max_norm = torch.max(euclidean_matrix)
-            if self.max_norm < current_max_norm:
-                self.max_norm = current_max_norm
-            euclidean_matrix = euclidean_matrix / self.max_norm
-        elif self.edge_generation_method == 'weighted_max_normalization':
-            self.weighted_max_norm = (self.weighted_max_norm*self.task_num + torch.max(euclidean_matrix).detach().cpu()) / (self.task_num+1)
-            euclidean_matrix = euclidean_matrix / self.weighted_max_norm
-            self.task_num += 1
-        elif self.edge_generation_method == 'unit_normalization':
-            euclidean_matrix = euclidean_matrix / torch.max(euclidean_matrix)
-        
-        edge_index = torch.transpose(torch.tensor([[i,j] for i in range(len(features)) for j in range(len(features))]), 0, 1)
-        row, col = edge_index
-        edge_weight = euclidean_matrix[row, col].view(-1, 1)
-        
-        edge_num = int(math.sqrt(edge_weight.shape[0]))
-        self_idx = [(e * edge_num) + e for e in range(edge_num)]
-        edge_weight[self_idx,] = 1
-        return edge_index.to(features.device), edge_weight.detach().to(features.device)
-"""
