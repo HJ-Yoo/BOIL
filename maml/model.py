@@ -25,6 +25,7 @@ class ConvNet(MetaModule):
         self.in_channels = in_channels
         self.out_features = out_features
         self.hidden_size = hidden_size
+        self.model_size = model_size
         
         if model_size == 'smallconv':
             self.features = MetaSequential(
@@ -33,6 +34,7 @@ class ConvNet(MetaModule):
                 conv3x3(hidden_size, hidden_size),
                 conv3x3(hidden_size, hidden_size)
             )
+            
             self.classifier = MetaLinear(hidden_size*wh_size*wh_size, out_features)
         
         if model_size == 'largeconv':

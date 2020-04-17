@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from maml.model import ConvNet, BasicBlock, ResNet
-from torchmeta.datasets.helpers import miniimagenet, tieredimagenet, cifar_fs, fc100
+from torchmeta.datasets.helpers import miniimagenet, tieredimagenet, cifar_fs, fc100, cub
 from collections import OrderedDict
 
 def load_dataset(args, mode):
@@ -66,6 +66,17 @@ def load_dataset(args, mode):
                         meta_val=args.meta_val,
                         meta_test=args.meta_test,
                         download=download)
+        
+    elif args.dataset == 'cub':
+        dataset = cub(folder=folder,
+                      shots=shots,
+                      ways=ways,
+                      shuffle=shuffle,
+                      test_shots=test_shots,
+                      meta_train=args.meta_train,
+                      meta_val=args.meta_val,
+                      meta_test=args.meta_test,
+                      download=download)
     return dataset
 
 def load_model(args):
@@ -105,10 +116,10 @@ def update_parameters(model, loss, extractor_step_size, classifier_step_size, fi
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
-        if 'classifier' in name: # To control inner update parameter
-            params[name] = param - classifier_step_size * grad
-        else:
+        if 'features' in name: # To control inner update parameter
             params[name] = param - extractor_step_size * grad
+        else:
+            params[name] = param - classifier_step_size * grad
     
     return params
 
@@ -133,24 +144,27 @@ def get_accuracy(logits, targets):
     return torch.mean(predictions.eq(targets).float())
 
 def get_graph_regularizer(features, labels=None, args=None):
-    support_features = features[:args.num_ways*args.num_shots,:]
-    query_features = features[args.num_ways*args.num_shots:,:]
-    support_labels = labels[0]
-    query_labels = labels[1]
+    support_features = features[0]
+    query_features = features[1]
     
-    distance = torch.zeros([len(support_labels), len(query_labels)]).to(args.device)
-    if args.graph_type=='single':
-        for j, class_j in enumerate(query_labels):
-            dist = []
-            for i, class_i in enumerate(support_labels):
-                if class_i == class_j:
-                    dist.append(torch.dist(support_features[i], query_features[j]))
-            distance[dist.index(min(dist))][j] = min(dist)
-    elif args.graph_type=='all':
-        for i, class_i in enumerate(support_labels):
-            for j, class_j in enumerate(query_labels):
-                distance[i][j] = torch.dist(support_features[i], query_features[j])
-                distance = distance/15
+    support_mean_features = torch.zeros([args.num_ways, support_features.shape[1]]).to(args.device)
+    print (support_mean_features.shape)
+    for i in range(args.num_ways):
+        idx = torch.where(labels==i)[0].tolist()
+        support_mean_features[i] = torch.mean(support_features[idx], dim=0)
     
-    graph_loss = torch.sum(distance)
+    cos = nn.CosineSimilarity()
+    for i in range(len(support_features)):
+        cos_similarity = cos(torch.cat([support_features[i].unsqueeze(0)]*args.num_ways,dim=0), support_mean_features)
+        print (labels[i])
+        print (cos_similarity)
+    
+    graph_loss = torch.tensor(0., device=args.device)
+    count = 0.
+    for i in range(len(support_features)):
+        for j in range(len(query_features)):
+            graph_loss += torch.dist(support_features[i], query_features[j])
+            count += 1.
+            
+    graph_loss = graph_loss / count
     return graph_loss

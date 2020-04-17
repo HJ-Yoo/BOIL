@@ -205,9 +205,14 @@ def cifar_fs(folder, shots, ways, shuffle=True, test_shots=None,
     --------
     `datasets.cifar100.CIFARFS` : Meta-dataset for the CIFAR-FS dataset.
     """
+    
+    defaults = {
+        'transform': Compose([Resize(32), ToTensor()])
+    }
+    
     return helper_with_default(CIFARFS, folder, shots, ways,
                                shuffle=shuffle, test_shots=test_shots,
-                               seed=seed, defaults={}, **kwargs)
+                               seed=seed, defaults=defaults, **kwargs)
 
 def fc100(folder, shots, ways, shuffle=True, test_shots=None,
           seed=None, **kwargs):
@@ -244,9 +249,14 @@ def fc100(folder, shots, ways, shuffle=True, test_shots=None,
     --------
     `datasets.cifar100.FC100` : Meta-dataset for the FC100 dataset.
     """
+    
+    defaults = {
+        'transform': Compose([Resize(32), ToTensor()])
+    }
+    
     return helper_with_default(FC100, folder, shots, ways,
                                shuffle=shuffle, test_shots=test_shots,
-                               seed=seed, defaults={}, **kwargs)
+                               seed=seed, defaults=defaults, **kwargs)
 
 
 def cub(folder, shots, ways, shuffle=True, test_shots=None,
@@ -292,7 +302,7 @@ def cub(folder, shots, ways, shuffle=True, test_shots=None,
                         ToTensor()
                     ])
     }
-
+    
     return helper_with_default(CUB, folder, shots, ways,
                                shuffle=shuffle, test_shots=test_shots,
                                seed=seed, defaults=defaults, **kwargs)

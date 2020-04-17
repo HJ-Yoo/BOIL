@@ -48,18 +48,14 @@ def main(args, mode, iteration=None):
 
             outer_loss = torch.tensor(0., device=args.device)
             accuracy = torch.tensor(0., device=args.device)
-            
+                
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
+                # model.classifier.weight.data.fill_(0.) # save_name: noise
+                # model.classifier.bias.data.fill_(0.)
                 model.train()
                 
-                support_features, support_logit = model(support_input)
+                before_support_features, support_logit = model(support_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
-                if args.graph_regularizer:
-                    _query_features, _query_logit = model(query_input)
-                    features = torch.cat((support_features, _query_features), dim=0)
-                    labels = [support_target, query_target]
-                    graph_loss = get_graph_regularizer(features=features, labels=labels, args=args)
-                    inner_loss += graph_loss * args.graph_beta
                     
                 model.zero_grad()
                 params = update_parameters(model, inner_loss, extractor_step_size=args.extractor_step_size, classifier_step_size=args.classifier_step_size, first_order=args.first_order)
@@ -69,6 +65,25 @@ def main(args, mode, iteration=None):
                 
                 query_features, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
+                
+                if args.graph_regularizer:
+                    same_class_threshold = 0.
+                    different_class_threshold = 0.6
+                    num_images = 15
+                    before_query_features, before_query_logit = model(query_input)
+
+                    cos = nn.CosineSimilarity()
+                    distance = torch.zeros([len(before_query_features), len(before_query_features)]).to(args.device)
+                    for i, before_query_feature in enumerate(before_query_features):
+                        distance[i] = cos(torch.cat([before_query_feature.unsqueeze(0)]*len(before_query_features)), before_query_features)
+                    for i in range(args.num_ways):
+                        distance[i*num_images:(i+1)*num_images, :i*num_images] -= different_class_threshold
+                        distance[i*num_images:(i+1)*num_images, i*num_images:(i+1)*num_images] = same_class_threshold
+                        distance[i*num_images:(i+1)*num_images, (i+1)*num_images:] -= different_class_threshold
+                    
+                    distance[distance < 0.] = 0.
+                    gr = torch.sum(distance) / len(distance.nonzero())
+                    outer_loss += 0.1 * gr
                 
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
@@ -126,7 +141,6 @@ if __name__ == '__main__':
         
     parser.add_argument('--graph-regularizer', action='store_true', help='classwise graph regularizer init')
     parser.add_argument('--graph-beta', type=float, default=1e-2, help='Hyperparameter for controlling graph loss.')
-    parser.add_argument('--graph-type', type=str, default='single', help='How to calculate graph loss')
     
     parser.add_argument('--init', action='store_true', help='extractor init')
         
@@ -145,21 +159,37 @@ if __name__ == '__main__':
     model = load_model(args)
     
     if args.init:
-        args.num_ways = 64
         pretrained_model = load_model(args)
-        filename = './pretrained.pt'
-        checkpoint = torch.load(filename)
+        checkpoint = '/home/osilab7/hdd/jhoon_maml_backup/exp1/5shot_results/miniimagenet_5shot_smallconv_extractor/models/epochs_30000.pt'
+        checkpoint = torch.load(checkpoint, map_location=args.device)
         pretrained_model.load_state_dict(checkpoint, strict=True)
-
-        for pre_p, p in list(zip(pretrained_model.parameters(), model.parameters())):
-            if pre_p.shape == p.shape:
-                p.data = copy.deepcopy(pre_p.data)
         
-        args.num_ways = 5
-        u, sigma, v = torch.svd(pretrained_model.classifier.weight.data)
-        classifier_pca = torch.mm(torch.mm(u[:2,:], torch.diag(sigma)), torch.t(v))
-        model.classifier.weight = torch.nn.Parameter(torch.cat([torch.mean(classifier_pca, dim=0, keepdims=True)] * args.num_ways, dim=0))
-    
+        model.classifier.weight.data = copy.deepcopy(pretrained_model.classifier.weight.data)
+        model.classifier.bias.data = copy.deepcopy(pretrained_model.classifier.bias.data)
+        
+#         for pre_p, p in list(zip(pretrained_model.parameters(), model.parameters())):
+#             if pre_p.shape == p.shape:
+#                 p.data = copy.deepcopy(pre_p.data)
+        
+#         cos = torch.nn.CosineSimilarity(dim=0)
+#         std = 1.5
+
+#         a = torch.zeros([1, 1600])
+#         b = a + torch.zeros([1, 1600]) * std
+#         c = (a+b)/2 + torch.zeros([1, 1600]) * std
+#         d = (a+b+c)/3 + torch.zeros([1, 1600]) * std
+#         e = (a+b+c+d)/4 + torch.zeros([1, 1600]) * std
+
+#         weight = torch.cat([a, b, c, d, e], dim=0)
+
+#         similiarity_matrix = torch.zeros([5, 5])
+#         for i, first in enumerate(weight):
+#             for j, second in enumerate(weight):
+#                 similiarity_matrix[i,j] = cos(first.squeeze(0), second.squeeze(0))
+#         print (similiarity_matrix)
+        
+#         model.classifier.weight.data = torch.nn.Parameter(weight)
+        
     log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                           columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
 
@@ -172,6 +202,7 @@ if __name__ == '__main__':
         log_pd['valid_accuracy'][(iteration+1)*args.train_batches-1] = np.mean(meta_valid_accuracy_logs)
         filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'logs.csv')
         log_pd.to_csv(filename, index=False)
+        
     meta_test_loss_logs, meta_test_accuracy_logs = main(args=args, mode='meta_test')
     log_pd['test_error'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_loss_logs)
     log_pd['test_accuracy'][args.batch_iter*args.train_batches-1] = np.mean(meta_test_accuracy_logs)
