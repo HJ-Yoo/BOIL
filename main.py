@@ -11,7 +11,7 @@ from torchmeta.utils.data import BatchMetaDataLoader
 from maml.utils import (load_dataset, load_model, update_parameters, meta_sgd_update_parameters, 
                         get_accuracy, get_graph_regularizer)
     
-def main(args, mode, iteration=None):
+def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
     dataset = load_dataset(args, mode)
     dataloader = BatchMetaDataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     
@@ -33,6 +33,8 @@ def main(args, mode, iteration=None):
         total = args.test_batches
         
     loss_logs, accuracy_logs = [], []
+    if args.meta_sgd:
+        tmp_lr_logs = np.zeros([args.train_batches, 6*4+2])
     
     # Training loop
     with tqdm(dataloader, total=total, leave=False) as pbar:
@@ -112,7 +114,12 @@ def main(args, mode, iteration=None):
             if args.meta_train:
                 outer_loss.backward()
                 meta_optimizer.step()
-
+                
+                tmp_extractor_lrs = [lr.item() for lr in model.extractor_lrs]
+                tmp_classifier_lrs = [lr.item() for lr in model.classifier_lrs]
+                
+                tmp_lr_logs[batch_idx] = tmp_extractor_lrs + tmp_classifier_lrs
+                
             postfix = {'mode': mode, 'iter': iteration, 'acc': round(accuracy.item(), 5)}
             pbar.set_postfix(postfix)
             if batch_idx+1 == total:
@@ -124,6 +131,10 @@ def main(args, mode, iteration=None):
         with open(filename, 'wb') as f:
             state_dict = model.state_dict()
             torch.save(state_dict, f)
+            
+        if args.meta_sgd:
+            lr_log_pd.loc[iteration*args.train_batches:(iteration+1)*args.train_batches-1,:] = tmp_lr_logs
+            lr_log_pd.to_csv(lr_filename, index=False)
     
     return loss_logs, accuracy_logs
 
@@ -213,9 +224,25 @@ if __name__ == '__main__':
         
     log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                           columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
+    
+    if args.meta_sgd:
+        lr_filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'lr_logs.csv')
+        
+        columns = []
+        for i in range(6):
+            tmp = ['conv{}_weight'.format(i+1),
+                   'conv{}_bias'.format(i+1),
+                   'conv{}_bn_gamma'.format(i+1),
+                   'conv{}_bn_beta'.format(i+1)]
+            columns += tmp
+        columns += ['fc_weight', 'fc_bias']
+        
+        lr_log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6*4+2]),
+                                          columns=columns)
+        lr_log_pd.to_csv(lr_filename, index=False)
 
     for iteration in tqdm(range(args.batch_iter)):
-        meta_train_loss_logs, meta_train_accuracy_logs = main(args=args, mode='meta_train', iteration=iteration)
+        meta_train_loss_logs, meta_train_accuracy_logs = main(args=args, mode='meta_train', iteration=iteration, lr_log_pd=lr_log_pd, lr_filename=lr_filename)
         meta_valid_loss_logs, meta_valid_accuracy_logs = main(args=args, mode='meta_valid', iteration=iteration)
         log_pd['train_error'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_loss_logs
         log_pd['train_accuracy'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_accuracy_logs
