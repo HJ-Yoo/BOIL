@@ -36,23 +36,54 @@ class ConvNet(MetaModule):
             )
             
             self.classifier = MetaLinear(hidden_size*wh_size*wh_size, out_features)
-        
+            
+            
         if model_size == 'largeconv':
             self.features = MetaSequential(
                 conv3x3(in_channels, hidden_size),
-                conv3x3(hidden_size, 2*hidden_size),
-                conv3x3(2*hidden_size, 4*hidden_size),
-                conv3x3(4*hidden_size, 8*hidden_size)
+                conv3x3(hidden_size, hidden_size),
+                conv3x3(hidden_size, hidden_size),
+                conv3x3(hidden_size, hidden_size),
+                conv3x3(hidden_size, hidden_size),
+                conv3x3(hidden_size, hidden_size)
             )
-            self.classifier = MetaLinear(8*hidden_size*wh_size*wh_size, out_features)
-        
+            
+            self.classifier = MetaLinear(hidden_size, out_features)
+    
     def forward(self, inputs, params=None):
         features = self.features(inputs, params=get_subdict(params, 'features'))
         features = features.view((features.size(0), -1))
         logits = self.classifier(features, params=get_subdict(params, 'classifier'))
         
         return features, logits
+    
+    def set_lr_params(self, extractor_lr, classifier_lr, method="elementwise"):
+        extractor_lrs = []
+        classifier_lrs = []
+        
+        if method == "elementwise":
+            for name, p in self.named_parameters():
+                if 'features' in name:
+                    extractor_lrs.append(torch.ones_like(p)*extractor_lr)
+                else:
+                    classifier_lrs.append(torch.ones_like(p)*classifier_lr)
+                    
+        elif method == "layerwise":
+            extractor_lrs = []
+            classifier_lrs = []
 
+            for name, p in self.named_parameters():
+                if 'features' in name:
+                    extractor_lrs.append(torch.tensor(extractor_lr))
+                else:
+                    classifier_lrs.append(torch.tensor(classifier_lr))
+            
+        extractor_lrs = nn.ParameterList([nn.Parameter(lr) for lr in extractor_lrs])
+        classifier_lrs = nn.ParameterList([nn.Parameter(lr) for lr in classifier_lrs])
+
+        self.extractor_lrs = extractor_lrs
+        self.classifier_lrs = classifier_lrs
+    
 """
 ResNet
 from https://github.com/kjunelee/MetaOptNet

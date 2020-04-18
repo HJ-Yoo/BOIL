@@ -123,6 +123,59 @@ def update_parameters(model, loss, extractor_step_size, classifier_step_size, fi
     
     return params
 
+def meta_sgd_update_parameters(model, loss, extractor_step_size, classifier_step_size, fixed_lr, extractor_lrs, classifier_lrs, first_order=False):
+    """Update the parameters of the model, with one step of gradient descent.
+
+    Parameters
+    ----------
+    model : `MetaModule` instance
+        Model.
+    loss : `torch.FloatTensor` instance
+        Loss function on which the gradient are computed for the descent step.
+    step_size : float (default: `0.5`)
+        Step-size of the gradient descent step.
+    first_order : bool (default: `False`)
+        If `True`, use the first-order approximation of MAML.
+
+    Returns
+    -------
+    params : OrderedDict
+        Dictionary containing the parameters after one step of adaptation.
+    """
+    grads = torch.autograd.grad(loss,
+                                model.meta_parameters(),
+                                create_graph=not first_order)
+    params = OrderedDict()
+    extractor_idx = 0
+    classifier_idx = 0    
+    
+    if fixed_lr:
+        if extractor_step_size == 0.0:
+            for (name, param), grad in zip(model.meta_named_parameters(), grads):
+                if 'features' in name:
+                    params[name] = param
+                else:
+                    params[name] = param - classifier_lrs[classifier_idx] * grad
+                    classifier_idx += 1
+        elif classifier_step_size == 0.0:
+            for (name, param), grad in zip(model.meta_named_parameters(), grads):
+                if 'features' in name:
+                    params[name] = param - extractor_lrs[extractor_idx] * grad
+                    extractor_idx += 1
+                else:
+                    params[name] = param
+    else:
+        for (name, param), grad in zip(model.meta_named_parameters(), grads):
+            if 'features' in name:
+                params[name] = param - extractor_lrs[extractor_idx] * grad
+                extractor_idx += 1
+            else:
+                params[name] = param - classifier_lrs[classifier_idx] * grad
+                classifier_idx += 1
+    
+    return params
+
+
 def get_accuracy(logits, targets):
     """Compute the accuracy (after adaptation) of MAML on the test/query points
 

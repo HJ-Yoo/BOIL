@@ -8,7 +8,8 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from torchmeta.utils.data import BatchMetaDataLoader
-from maml.utils import load_dataset, load_model, update_parameters, get_accuracy, get_graph_regularizer
+from maml.utils import (load_dataset, load_model, update_parameters, meta_sgd_update_parameters, 
+                        get_accuracy, get_graph_regularizer)
     
 def main(args, mode, iteration=None):
     dataset = load_dataset(args, mode)
@@ -58,7 +59,22 @@ def main(args, mode, iteration=None):
                 inner_loss = F.cross_entropy(support_logit, support_target)
                     
                 model.zero_grad()
-                params = update_parameters(model, inner_loss, extractor_step_size=args.extractor_step_size, classifier_step_size=args.classifier_step_size, first_order=args.first_order)
+                
+                if not args.meta_sgd:
+                    params = update_parameters(model,
+                                               inner_loss,
+                                               extractor_step_size=args.extractor_step_size,
+                                               classifier_step_size=args.classifier_step_size,
+                                               first_order=args.first_order)
+                else:
+                    params = meta_sgd_update_parameters(model,
+                                                        inner_loss,
+                                                        extractor_step_size=args.extractor_step_size,
+                                                        classifier_step_size=args.classifier_step_size,
+                                                        fixed_lr = args.fixed_lr,
+                                                        extractor_lrs=model.extractor_lrs,
+                                                        classifier_lrs=model.classifier_lrs,
+                                                        first_order=args.first_order)
                 
                 if args.meta_val or args.meta_test:
                     model.eval()
@@ -138,7 +154,10 @@ if __name__ == '__main__':
     parser.add_argument('--valid-batches', type=int, default=25, help='Number of batches the model is validated over (default: 25).')
     parser.add_argument('--test-batches', type=int, default=2500, help='Number of batches the model is tested over (default: 2500).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
-        
+    
+    parser.add_argument('--meta-sgd', action='store_true', help='meta-sgd update')
+    parser.add_argument('--fixed-lr', action='store_true', help='fixed learning rate')
+    
     parser.add_argument('--graph-regularizer', action='store_true', help='classwise graph regularizer init')
     parser.add_argument('--graph-beta', type=float, default=1e-2, help='Hyperparameter for controlling graph loss.')
     
@@ -157,6 +176,8 @@ if __name__ == '__main__':
     
     args.device = torch.device(args.device)  
     model = load_model(args)
+    if args.meta_sgd:
+        model.set_lr_params(args.extractor_step_size, args.classifier_step_size, method="layerwise")
     
     if args.init:
         pretrained_model = load_model(args)
