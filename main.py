@@ -34,7 +34,7 @@ def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
         
     loss_logs, accuracy_logs = [], []
     if args.meta_sgd:
-        tmp_lr_logs = np.zeros([args.train_batches, 6*4+2])
+        tmp_lr_logs = np.zeros([args.train_batches, 4*12+2])
     
     # Training loop
     with tqdm(dataloader, total=total, leave=False) as pbar:
@@ -78,8 +78,8 @@ def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
                                                         classifier_lrs=model.classifier_lrs,
                                                         first_order=args.first_order)
                 
-                if args.meta_val or args.meta_test:
-                    model.eval()
+                # if args.meta_val or args.meta_test:
+                #     model.eval()
                 
                 query_features, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
@@ -115,10 +115,10 @@ def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
                 outer_loss.backward()
                 meta_optimizer.step()
                 
-                tmp_extractor_lrs = [lr.item() for lr in model.extractor_lrs]
-                tmp_classifier_lrs = [lr.item() for lr in model.classifier_lrs]
+                # tmp_extractor_lrs = [lr.item() for lr in model.extractor_lrs]
+                # tmp_classifier_lrs = [lr.item() for lr in model.classifier_lrs]
                 
-                tmp_lr_logs[batch_idx] = tmp_extractor_lrs + tmp_classifier_lrs
+                # tmp_lr_logs[batch_idx] = tmp_extractor_lrs + tmp_classifier_lrs
                 
             postfix = {'mode': mode, 'iter': iteration, 'acc': round(accuracy.item(), 5)}
             pbar.set_postfix(postfix)
@@ -128,9 +128,10 @@ def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
     # Save model
     if args.meta_train:
         filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models', 'epochs_{}.pt'.format((iteration+1)*total))
-        with open(filename, 'wb') as f:
-            state_dict = model.state_dict()
-            torch.save(state_dict, f)
+        if (iteration+1)*total % 5000 == 0:
+            with open(filename, 'wb') as f:
+                state_dict = model.state_dict()
+                torch.save(state_dict, f)
             
         if args.meta_sgd:
             lr_log_pd.loc[iteration*args.train_batches:(iteration+1)*args.train_batches-1,:] = tmp_lr_logs
@@ -229,20 +230,28 @@ if __name__ == '__main__':
         lr_filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'lr_logs.csv')
         
         columns = []
-        for i in range(6):
-            tmp = ['conv{}_weight'.format(i+1),
-                   'conv{}_bias'.format(i+1),
-                   'conv{}_bn_gamma'.format(i+1),
-                   'conv{}_bn_beta'.format(i+1)]
+        for i in range(4):
+            tmp = ['block{}_conv1_weight'.format(i+1),
+                   'block{}_conv1_bias'.format(i+1),
+                   'block{}_bn1_gamma'.format(i+1),
+                   'block{}_bn1_beta'.format(i+1),
+                   'block{}_conv2_weight'.format(i+1),
+                   'block{}_conv2_bias'.format(i+1),
+                   'block{}_bn2_gamma'.format(i+1),
+                   'block{}_bn2_beta'.format(i+1),
+                   'block{}_conv2_weight'.format(i+1),
+                   'block{}_conv2_bias'.format(i+1),
+                   'block{}_bn2_gamma'.format(i+1),
+                   'block{}_bn2_beta'.format(i+1),]
             columns += tmp
         columns += ['fc_weight', 'fc_bias']
         
-        lr_log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6*4+2]),
+        lr_log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 4*12+2]),
                                           columns=columns)
         lr_log_pd.to_csv(lr_filename, index=False)
 
     for iteration in tqdm(range(args.batch_iter)):
-        meta_train_loss_logs, meta_train_accuracy_logs = main(args=args, mode='meta_train', iteration=iteration, lr_log_pd=lr_log_pd, lr_filename=lr_filename)
+        meta_train_loss_logs, meta_train_accuracy_logs = main(args=args, mode='meta_train', iteration=iteration)
         meta_valid_loss_logs, meta_valid_accuracy_logs = main(args=args, mode='meta_valid', iteration=iteration)
         log_pd['train_error'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_loss_logs
         log_pd['train_accuracy'][iteration*args.train_batches:(iteration+1)*args.train_batches] = meta_train_accuracy_logs

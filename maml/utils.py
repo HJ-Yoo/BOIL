@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from maml.model import ConvNet, BasicBlock, ResNet
+from maml.model import ConvNet, BasicBlock, BasicBlockWithoutResidual, ResNet
 from torchmeta.datasets.helpers import miniimagenet, tieredimagenet, cifar_fs, fc100, cub
 from collections import OrderedDict
 
@@ -66,7 +66,6 @@ def load_dataset(args, mode):
                         meta_val=args.meta_val,
                         meta_test=args.meta_test,
                         download=download)
-        
     elif args.dataset == 'cub':
         dataset = cub(folder=folder,
                       shots=shots,
@@ -88,7 +87,16 @@ def load_model(args):
     if args.model == 'smallconv' or args.model == 'largeconv':
         model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, model_size=args.model, wh_size=wh_size)
     elif args.model == 'resnet':
-        model = ResNet(block=BasicBlock, keep_prob=1.0, avg_pool=True, out_features=args.num_ways, wh_size=1)
+        if args.blocks_type == 'a':
+            blocks = [BasicBlock, BasicBlock, BasicBlock, BasicBlock]
+        elif args.blocks_type == 'b':
+            blocks = [BasicBlock, BasicBlock, BasicBlock, BasicBlockWithoutResidual]
+        elif args.blocks_type == 'c':
+            blocks = [BasicBlock, BasicBlock, BasicBlockWithoutResidual, BasicBlockWithoutResidual]
+        elif args.blocks_type == 'd':
+            blocks = [BasicBlock, BasicBlockWithoutResidual, BasicBlockWithoutResidual, BasicBlockWithoutResidual]
+        
+        model = ResNet(blocks=blocks, keep_prob=1.0, avg_pool=True, drop_rate=0.0, out_features=args.num_ways, wh_size=1)
     return model
 
 def update_parameters(model, loss, extractor_step_size, classifier_step_size, first_order=False):
@@ -116,7 +124,7 @@ def update_parameters(model, loss, extractor_step_size, classifier_step_size, fi
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
-        if 'features' in name: # To control inner update parameter
+        if 'features' in name or 'layer' in name: # To control inner update parameter
             params[name] = param - extractor_step_size * grad
         else:
             params[name] = param - classifier_step_size * grad
@@ -147,7 +155,10 @@ def meta_sgd_update_parameters(model, loss, extractor_step_size, classifier_step
                                 create_graph=not first_order)
     params = OrderedDict()
     extractor_idx = 0
-    classifier_idx = 0    
+    classifier_idx = 0
+    
+    # extractor_lrs = nn.ParameterList([nn.Parameter(torch.tensor(0.).to('cuda:0')) if lr.data<0.0 else lr for lr in extractor_lrs])
+    # classifier_lrs = nn.ParameterList([nn.Parameter(torch.tensor(0.).to('cuda:0')) if lr.data<0.0 else lr for lr in classifier_lrs])
     
     if fixed_lr:
         if extractor_step_size == 0.0:
