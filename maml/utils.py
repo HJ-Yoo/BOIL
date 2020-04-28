@@ -84,8 +84,8 @@ def load_model(args):
     elif args.dataset == 'cifar_fs' or args.dataset == 'fc100':
         wh_size = 2
         
-    if args.model == 'smallconv' or args.model == 'largeconv':
-        model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, model_size=args.model, wh_size=wh_size)
+    if args.model == '4conv':
+        model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, wh_size=wh_size)
     elif args.model == 'resnet':
         if args.blocks_type == 'a':
             blocks = [BasicBlock, BasicBlock, BasicBlock, BasicBlock]
@@ -124,68 +124,12 @@ def update_parameters(model, loss, extractor_step_size, classifier_step_size, fi
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
-        if 'features' in name or 'layer' in name: # To control inner update parameter
-            params[name] = param - extractor_step_size * grad
-        else:
+        if 'classifier' in name: # To control inner update parameter
             params[name] = param - classifier_step_size * grad
+        else:
+            params[name] = param - extractor_step_size * grad
     
     return params
-
-def meta_sgd_update_parameters(model, loss, extractor_step_size, classifier_step_size, fixed_lr, extractor_lrs, classifier_lrs, first_order=False):
-    """Update the parameters of the model, with one step of gradient descent.
-
-    Parameters
-    ----------
-    model : `MetaModule` instance
-        Model.
-    loss : `torch.FloatTensor` instance
-        Loss function on which the gradient are computed for the descent step.
-    step_size : float (default: `0.5`)
-        Step-size of the gradient descent step.
-    first_order : bool (default: `False`)
-        If `True`, use the first-order approximation of MAML.
-
-    Returns
-    -------
-    params : OrderedDict
-        Dictionary containing the parameters after one step of adaptation.
-    """
-    grads = torch.autograd.grad(loss,
-                                model.meta_parameters(),
-                                create_graph=not first_order)
-    params = OrderedDict()
-    extractor_idx = 0
-    classifier_idx = 0
-    
-    # extractor_lrs = nn.ParameterList([nn.Parameter(torch.tensor(0.).to('cuda:0')) if lr.data<0.0 else lr for lr in extractor_lrs])
-    # classifier_lrs = nn.ParameterList([nn.Parameter(torch.tensor(0.).to('cuda:0')) if lr.data<0.0 else lr for lr in classifier_lrs])
-    
-    if fixed_lr:
-        if extractor_step_size == 0.0:
-            for (name, param), grad in zip(model.meta_named_parameters(), grads):
-                if 'features' in name:
-                    params[name] = param
-                else:
-                    params[name] = param - classifier_lrs[classifier_idx] * grad
-                    classifier_idx += 1
-        elif classifier_step_size == 0.0:
-            for (name, param), grad in zip(model.meta_named_parameters(), grads):
-                if 'features' in name:
-                    params[name] = param - extractor_lrs[extractor_idx] * grad
-                    extractor_idx += 1
-                else:
-                    params[name] = param
-    else:
-        for (name, param), grad in zip(model.meta_named_parameters(), grads):
-            if 'features' in name:
-                params[name] = param - extractor_lrs[extractor_idx] * grad
-                extractor_idx += 1
-            else:
-                params[name] = param - classifier_lrs[classifier_idx] * grad
-                classifier_idx += 1
-    
-    return params
-
 
 def get_accuracy(logits, targets):
     """Compute the accuracy (after adaptation) of MAML on the test/query points
@@ -206,29 +150,3 @@ def get_accuracy(logits, targets):
     """
     _, predictions = torch.max(logits, dim=-1)
     return torch.mean(predictions.eq(targets).float())
-
-def get_graph_regularizer(features, labels=None, args=None):
-    support_features = features[0]
-    query_features = features[1]
-    
-    support_mean_features = torch.zeros([args.num_ways, support_features.shape[1]]).to(args.device)
-    print (support_mean_features.shape)
-    for i in range(args.num_ways):
-        idx = torch.where(labels==i)[0].tolist()
-        support_mean_features[i] = torch.mean(support_features[idx], dim=0)
-    
-    cos = nn.CosineSimilarity()
-    for i in range(len(support_features)):
-        cos_similarity = cos(torch.cat([support_features[i].unsqueeze(0)]*args.num_ways,dim=0), support_mean_features)
-        print (labels[i])
-        print (cos_similarity)
-    
-    graph_loss = torch.tensor(0., device=args.device)
-    count = 0.
-    for i in range(len(support_features)):
-        for j in range(len(query_features)):
-            graph_loss += torch.dist(support_features[i], query_features[j])
-            count += 1.
-            
-    graph_loss = graph_loss / count
-    return graph_loss

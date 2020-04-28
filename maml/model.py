@@ -20,68 +20,27 @@ def conv3x3(in_channels, out_channels, **kwargs):
     )
 
 class ConvNet(MetaModule):
-    def __init__(self, in_channels, out_features, hidden_size, model_size, wh_size):
+    def __init__(self, in_channels, out_features, hidden_size, wh_size):
         super(ConvNet, self).__init__()
         self.in_channels = in_channels
         self.out_features = out_features
         self.hidden_size = hidden_size
-        self.model_size = model_size
         
-        if model_size == 'smallconv':
-            self.features = MetaSequential(
-                conv3x3(in_channels, hidden_size),
-                conv3x3(hidden_size, hidden_size),
-                conv3x3(hidden_size, hidden_size),
-                conv3x3(hidden_size, hidden_size)
-            )
-            
-            self.classifier = MetaLinear(hidden_size*wh_size*wh_size, out_features)
-            
-        if model_size == 'largeconv':
-            self.features = MetaSequential(
-                conv3x3(in_channels, hidden_size),
-                conv3x3(hidden_size, hidden_size),
-                conv3x3(hidden_size, hidden_size),
-                conv3x3(hidden_size, hidden_size),
-                conv3x3(hidden_size, hidden_size),
-                conv3x3(hidden_size, hidden_size)
-            )
-            
-            self.classifier = MetaLinear(hidden_size, out_features)
-    
+        self.features = MetaSequential(
+            conv3x3(in_channels, hidden_size),
+            conv3x3(hidden_size, hidden_size),
+            conv3x3(hidden_size, hidden_size),
+            conv3x3(hidden_size, hidden_size)
+        )
+
+        self.classifier = MetaLinear(hidden_size*wh_size*wh_size, out_features)
+
     def forward(self, inputs, params=None):
         features = self.features(inputs, params=get_subdict(params, 'features'))
         features = features.view((features.size(0), -1))
         logits = self.classifier(features, params=get_subdict(params, 'classifier'))
         
         return features, logits
-    
-    def set_lr_params(self, extractor_lr, classifier_lr, method="elementwise"):
-        extractor_lrs = []
-        classifier_lrs = []
-        
-        if method == "elementwise":
-            for name, p in self.named_parameters():
-                if 'features' in name:
-                    extractor_lrs.append(torch.ones_like(p)*extractor_lr)
-                else:
-                    classifier_lrs.append(torch.ones_like(p)*classifier_lr)
-                    
-        elif method == "layerwise":
-            extractor_lrs = []
-            classifier_lrs = []
-
-            for name, p in self.named_parameters():
-                if 'features' in name:
-                    extractor_lrs.append(torch.tensor(extractor_lr))
-                else:
-                    classifier_lrs.append(torch.tensor(classifier_lr))
-            
-        extractor_lrs = nn.ParameterList([nn.Parameter(lr) for lr in extractor_lrs])
-        classifier_lrs = nn.ParameterList([nn.Parameter(lr) for lr in classifier_lrs])
-
-        self.extractor_lrs = extractor_lrs
-        self.classifier_lrs = classifier_lrs
     
 """
 ResNet
@@ -90,6 +49,7 @@ This ResNet network was designed following the practice of the following papers:
 TADAM: Task dependent adaptive metric for improved few-shot learning (Oreshkin et al., in NIPS 2018) and
 A Simple Neural Attentive Meta-Learner (Mishra et al., in ICLR 2018).
 """
+
 class DropBlock(MetaModule):
     def __init__(self, block_size):
         super(DropBlock, self).__init__()
@@ -307,31 +267,3 @@ class ResNet(MetaModule):
         features = x.view((x.size(0), -1))
         logits = self.classifier(self.dropout(features), params=get_subdict(params, 'classifier'))
         return features, logits
-    
-    
-    def set_lr_params(self, extractor_lr, classifier_lr, method="elementwise"):
-        extractor_lrs = []
-        classifier_lrs = []
-        
-        if method == "elementwise":
-            for name, p in self.named_parameters():
-                if 'layer' in name:
-                    extractor_lrs.append(torch.ones_like(p)*extractor_lr)
-                else:
-                    classifier_lrs.append(torch.ones_like(p)*classifier_lr)
-                    
-        elif method == "layerwise":
-            extractor_lrs = []
-            classifier_lrs = []
-
-            for name, p in self.named_parameters():
-                if 'layer' in name:
-                    extractor_lrs.append(torch.tensor(extractor_lr))
-                else:
-                    classifier_lrs.append(torch.tensor(classifier_lr))
-            
-        extractor_lrs = nn.ParameterList([nn.Parameter(lr) for lr in extractor_lrs])
-        classifier_lrs = nn.ParameterList([nn.Parameter(lr) for lr in classifier_lrs])
-
-        self.extractor_lrs = extractor_lrs
-        self.classifier_lrs = classifier_lrs

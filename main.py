@@ -8,10 +8,9 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from torchmeta.utils.data import BatchMetaDataLoader
-from maml.utils import (load_dataset, load_model, update_parameters, meta_sgd_update_parameters, 
-                        get_accuracy, get_graph_regularizer)
+from maml.utils import load_dataset, load_model, update_parameters, get_accuracy
     
-def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
+def main(args, mode, iteration=None):
     dataset = load_dataset(args, mode)
     dataloader = BatchMetaDataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     
@@ -33,8 +32,6 @@ def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
         total = args.test_batches
         
     loss_logs, accuracy_logs = [], []
-    if args.meta_sgd:
-        tmp_lr_logs = np.zeros([args.train_batches, 4*12+2])
     
     # Training loop
     with tqdm(dataloader, total=total, leave=False) as pbar:
@@ -53,55 +50,22 @@ def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
             accuracy = torch.tensor(0., device=args.device)
                 
             for task_idx, (support_input, support_target, query_input, query_target) in enumerate(zip(support_inputs, support_targets, query_inputs, query_targets)):
-                # model.classifier.weight.data.fill_(0.) # save_name: noise
-                # model.classifier.bias.data.fill_(0.)
-                model.train()
-                
-                before_support_features, support_logit = model(support_input)
+                support_features, support_logit = model(support_input)
                 inner_loss = F.cross_entropy(support_logit, support_target)
                     
                 model.zero_grad()
                 
-                if not args.meta_sgd:
-                    params = update_parameters(model,
-                                               inner_loss,
-                                               extractor_step_size=args.extractor_step_size,
-                                               classifier_step_size=args.classifier_step_size,
-                                               first_order=args.first_order)
-                else:
-                    params = meta_sgd_update_parameters(model,
-                                                        inner_loss,
-                                                        extractor_step_size=args.extractor_step_size,
-                                                        classifier_step_size=args.classifier_step_size,
-                                                        fixed_lr = args.fixed_lr,
-                                                        extractor_lrs=model.extractor_lrs,
-                                                        classifier_lrs=model.classifier_lrs,
-                                                        first_order=args.first_order)
+                params = update_parameters(model,
+                                           inner_loss,
+                                           extractor_step_size=args.extractor_step_size,
+                                           classifier_step_size=args.classifier_step_size,
+                                           first_order=args.first_order)
                 
                 # if args.meta_val or args.meta_test:
                 #     model.eval()
-                
+
                 query_features, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
-                
-                if args.graph_regularizer:
-                    same_class_threshold = 0.
-                    different_class_threshold = 0.6
-                    num_images = 15
-                    before_query_features, before_query_logit = model(query_input)
-
-                    cos = nn.CosineSimilarity()
-                    distance = torch.zeros([len(before_query_features), len(before_query_features)]).to(args.device)
-                    for i, before_query_feature in enumerate(before_query_features):
-                        distance[i] = cos(torch.cat([before_query_feature.unsqueeze(0)]*len(before_query_features)), before_query_features)
-                    for i in range(args.num_ways):
-                        distance[i*num_images:(i+1)*num_images, :i*num_images] -= different_class_threshold
-                        distance[i*num_images:(i+1)*num_images, i*num_images:(i+1)*num_images] = same_class_threshold
-                        distance[i*num_images:(i+1)*num_images, (i+1)*num_images:] -= different_class_threshold
-                    
-                    distance[distance < 0.] = 0.
-                    gr = torch.sum(distance) / len(distance.nonzero())
-                    outer_loss += 0.1 * gr
                 
                 with torch.no_grad():
                     accuracy += get_accuracy(query_logit, query_target)
@@ -115,11 +79,6 @@ def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
                 outer_loss.backward()
                 meta_optimizer.step()
                 
-                # tmp_extractor_lrs = [lr.item() for lr in model.extractor_lrs]
-                # tmp_classifier_lrs = [lr.item() for lr in model.classifier_lrs]
-                
-                # tmp_lr_logs[batch_idx] = tmp_extractor_lrs + tmp_classifier_lrs
-                
             postfix = {'mode': mode, 'iter': iteration, 'acc': round(accuracy.item(), 5)}
             pbar.set_postfix(postfix)
             if batch_idx+1 == total:
@@ -132,11 +91,7 @@ def main(args, mode, iteration=None, lr_log_pd=None, lr_filename=None):
             with open(filename, 'wb') as f:
                 state_dict = model.state_dict()
                 torch.save(state_dict, f)
-            
-        if args.meta_sgd:
-            lr_log_pd.loc[iteration*args.train_batches:(iteration+1)*args.train_batches-1,:] = tmp_lr_logs
-            lr_log_pd.to_csv(lr_filename, index=False)
-    
+
     return loss_logs, accuracy_logs
 
 if __name__ == '__main__':
@@ -156,8 +111,9 @@ if __name__ == '__main__':
     parser.add_argument('--first-order', action='store_true', help='Use the first-order approximation of MAML.')
     parser.add_argument('--extractor-step-size', type=float, default=0.5, help='Extractor step-size for the gradient step for adaptation (default: 0.5).')
     parser.add_argument('--classifier-step-size', type=float, default=0.5, help='Classifier step-size for the gradient step for adaptation (default: 0.5).')
-    parser.add_argument('--hidden-size', type=int, default=64, help='Number of channels for each convolutional layer (default: 64).')
-
+    parser.add_argument('--hidden-size', type=int, default=32, help='Number of channels for each convolutional layer (default: 64).')
+    parser.add_argument('--blocks-type', type=str, default=None, help='Resnet block type (optional).')
+    
     parser.add_argument('--output-folder', type=str, default='./output/', help='Path to the output folder for saving the model (optional).')
     parser.add_argument('--save-name', type=str, default=None, help='Name of model (optional).')
     parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
@@ -166,14 +122,6 @@ if __name__ == '__main__':
     parser.add_argument('--valid-batches', type=int, default=25, help='Number of batches the model is validated over (default: 25).')
     parser.add_argument('--test-batches', type=int, default=2500, help='Number of batches the model is tested over (default: 2500).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
-    
-    parser.add_argument('--meta-sgd', action='store_true', help='meta-sgd update')
-    parser.add_argument('--fixed-lr', action='store_true', help='fixed learning rate')
-    
-    parser.add_argument('--graph-regularizer', action='store_true', help='classwise graph regularizer init')
-    parser.add_argument('--graph-beta', type=float, default=1e-2, help='Hyperparameter for controlling graph loss.')
-    
-    parser.add_argument('--init', action='store_true', help='extractor init')
         
     args = parser.parse_args()  
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs'), exist_ok=True)
@@ -188,67 +136,9 @@ if __name__ == '__main__':
     
     args.device = torch.device(args.device)  
     model = load_model(args)
-    if args.meta_sgd:
-        model.set_lr_params(args.extractor_step_size, args.classifier_step_size, method="layerwise")
-    
-    if args.init:
-        pretrained_model = load_model(args)
-        checkpoint = '/home/osilab7/hdd/jhoon_maml_backup/exp1/5shot_results/miniimagenet_5shot_smallconv_extractor/models/epochs_30000.pt'
-        checkpoint = torch.load(checkpoint, map_location=args.device)
-        pretrained_model.load_state_dict(checkpoint, strict=True)
-        
-        model.classifier.weight.data = copy.deepcopy(pretrained_model.classifier.weight.data)
-        model.classifier.bias.data = copy.deepcopy(pretrained_model.classifier.bias.data)
-        
-#         for pre_p, p in list(zip(pretrained_model.parameters(), model.parameters())):
-#             if pre_p.shape == p.shape:
-#                 p.data = copy.deepcopy(pre_p.data)
-        
-#         cos = torch.nn.CosineSimilarity(dim=0)
-#         std = 1.5
-
-#         a = torch.zeros([1, 1600])
-#         b = a + torch.zeros([1, 1600]) * std
-#         c = (a+b)/2 + torch.zeros([1, 1600]) * std
-#         d = (a+b+c)/3 + torch.zeros([1, 1600]) * std
-#         e = (a+b+c+d)/4 + torch.zeros([1, 1600]) * std
-
-#         weight = torch.cat([a, b, c, d, e], dim=0)
-
-#         similiarity_matrix = torch.zeros([5, 5])
-#         for i, first in enumerate(weight):
-#             for j, second in enumerate(weight):
-#                 similiarity_matrix[i,j] = cos(first.squeeze(0), second.squeeze(0))
-#         print (similiarity_matrix)
-        
-#         model.classifier.weight.data = torch.nn.Parameter(weight)
         
     log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                           columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
-    
-    if args.meta_sgd:
-        lr_filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'lr_logs.csv')
-        
-        columns = []
-        for i in range(4):
-            tmp = ['block{}_conv1_weight'.format(i+1),
-                   'block{}_conv1_bias'.format(i+1),
-                   'block{}_bn1_gamma'.format(i+1),
-                   'block{}_bn1_beta'.format(i+1),
-                   'block{}_conv2_weight'.format(i+1),
-                   'block{}_conv2_bias'.format(i+1),
-                   'block{}_bn2_gamma'.format(i+1),
-                   'block{}_bn2_beta'.format(i+1),
-                   'block{}_conv2_weight'.format(i+1),
-                   'block{}_conv2_bias'.format(i+1),
-                   'block{}_bn2_gamma'.format(i+1),
-                   'block{}_bn2_beta'.format(i+1),]
-            columns += tmp
-        columns += ['fc_weight', 'fc_bias']
-        
-        lr_log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 4*12+2]),
-                                          columns=columns)
-        lr_log_pd.to_csv(lr_filename, index=False)
 
     for iteration in tqdm(range(args.batch_iter)):
         meta_train_loss_logs, meta_train_accuracy_logs = main(args=args, mode='meta_train', iteration=iteration)
