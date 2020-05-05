@@ -95,6 +95,8 @@ def load_model(args):
             blocks = [BasicBlock, BasicBlock, BasicBlockWithoutResidual, BasicBlockWithoutResidual]
         elif args.blocks_type == 'd':
             blocks = [BasicBlock, BasicBlockWithoutResidual, BasicBlockWithoutResidual, BasicBlockWithoutResidual]
+        elif args.blocks_type == 'e':
+            blocks = [BasicBlockWithoutResidual, BasicBlockWithoutResidual, BasicBlockWithoutResidual, BasicBlockWithoutResidual]
         
         model = ResNet(blocks=blocks, keep_prob=1.0, avg_pool=True, drop_rate=0.0, out_features=args.num_ways, wh_size=1)
     return model
