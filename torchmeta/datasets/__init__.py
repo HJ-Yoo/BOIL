@@ -8,6 +8,7 @@ from torchmeta.datasets.tieredimagenet import TieredImagenet
 from torchmeta.datasets.tcga import TCGA
 
 from torchmeta.datasets.vgg_flower import VggFlower
+from torchmeta.datasets.aircraft import AirCraft
 
 from torchmeta.datasets import helpers
 
@@ -22,5 +23,6 @@ __all__ = [
     'DoubleMNIST',
     'TripleMNIST',
     'VggFlower',
+    'AirCraft',
     'helpers'
 ]
