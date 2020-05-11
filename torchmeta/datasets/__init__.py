@@ -7,6 +7,8 @@ from torchmeta.datasets.omniglot import Omniglot
 from torchmeta.datasets.tieredimagenet import TieredImagenet
 from torchmeta.datasets.tcga import TCGA
 
+from torchmeta.datasets.vgg_flower import VggFlower
+
 from torchmeta.datasets import helpers
 
 __all__ = [
@@ -19,5 +21,6 @@ __all__ = [
     'CUB',
     'DoubleMNIST',
     'TripleMNIST',
+    'VggFlower',
     'helpers'
 ]

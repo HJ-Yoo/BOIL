@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from maml.model import ConvNet, BasicBlock, BasicBlockWithoutResidual, ResNet
-from torchmeta.datasets.helpers import miniimagenet, tieredimagenet, cifar_fs, fc100, cub
+from torchmeta.datasets.helpers import miniimagenet, tieredimagenet, cifar_fs, fc100, cub, vgg_flower
 from collections import OrderedDict
 
 def load_dataset(args, mode):
@@ -76,15 +76,25 @@ def load_dataset(args, mode):
                       meta_val=args.meta_val,
                       meta_test=args.meta_test,
                       download=download)
+    elif args.dataset == 'vgg_flower':
+        dataset = vgg_flower(folder=folder,
+                             shots=shots,
+                             ways=ways,
+                             shuffle=shuffle,
+                             test_shots=test_shots,
+                             meta_train=args.meta_train,
+                             meta_val=args.meta_val,
+                             meta_test=args.meta_test,
+                             download=download)
     return dataset
 
 def load_model(args):
-    if args.dataset == 'miniimagenet' or args.dataset == 'tieredimagenet':
+    if args.dataset == 'miniimagenet' or args.dataset == 'tieredimagenet' or args.dataset == 'cub':
         wh_size = 5
-    elif args.dataset == 'cifar_fs' or args.dataset == 'fc100':
+    elif args.dataset == 'cifar_fs' or args.dataset == 'fc100' or args.dataset == 'vgg_flower':
         wh_size = 2
         
-    if args.model == '4conv':
+    if args.model == '4conv' or args.model == 'smallconv':
         model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, wh_size=wh_size)
     elif args.model == 'resnet':
         if args.blocks_type == 'a':
