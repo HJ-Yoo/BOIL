@@ -17,7 +17,7 @@ from torchmeta.utils.data import Dataset, ClassDataset, CombinationMetaDataset
 from torchvision.datasets.utils import download_file_from_google_drive
 
 
-class AirCraft(CombinationMetaDataset):
+class SVHN(CombinationMetaDataset):
     """
     The Mini-Imagenet dataset, introduced in [1]. This dataset contains images 
     of 100 different classes from the ILSVRC-12 dataset (Imagenet challenge). 
@@ -92,17 +92,18 @@ class AirCraft(CombinationMetaDataset):
                  meta_val=False, meta_test=False, meta_split=None,
                  transform=None, target_transform=None, dataset_transform=None,
                  class_augmentations=None, download=False):
-        dataset = AirCraftClassDataset(root, meta_train=meta_train,
+        dataset = SVHNClassDataset(root, meta_train=meta_train,
             meta_val=meta_val, meta_test=meta_test, meta_split=meta_split,
             transform=transform, class_augmentations=class_augmentations,
             download=download)
-        super(AirCraft, self).__init__(dataset, num_classes_per_task,
+        super(SVHN, self).__init__(dataset, num_classes_per_task,
             target_transform=target_transform, dataset_transform=dataset_transform)
 
-class AirCraftClassDataset(ClassDataset):
-    folder = 'aircraft'
+class SVHNClassDataset(ClassDataset):
+    folder = 'svhn'
 
-    tar_url = 'http://www.robots.ox.ac.uk/~vgg/data/fgvc-aircraft/archives/fgvc-aircraft-2013b.tar.gz'
+    train_url = 'http://ufldl.stanford.edu/housenumbers/train_32x32.mat'
+    test_url = 'http://ufldl.stanford.edu/housenumbers/test_32x32.mat'
     
     filename = '{0}_data.hdf5'
     filename_labels = '{0}_labels.json'
@@ -110,7 +111,7 @@ class AirCraftClassDataset(ClassDataset):
     def __init__(self, root, meta_train=False, meta_val=False, meta_test=False,
                  meta_split=None, transform=None, class_augmentations=None,
                  download=False):
-        super(AirCraftClassDataset, self).__init__(meta_train=meta_train,
+        super(SVHNClassDataset, self).__init__(meta_train=meta_train,
             meta_val=meta_val, meta_test=meta_test, meta_split=meta_split,
             class_augmentations=class_augmentations)
         
@@ -129,7 +130,7 @@ class AirCraftClassDataset(ClassDataset):
             self.download()
 
         if not self._check_integrity():
-            raise RuntimeError('AirCraft integrity check failed')
+            raise RuntimeError('SVHN integrity check failed')
         self._num_classes = len(self.labels)
 
     def __getitem__(self, index):
@@ -138,7 +139,7 @@ class AirCraftClassDataset(ClassDataset):
         transform = self.get_transform(index, self.transform)
         target_transform = self.get_target_transform(index)
 
-        return AirCraftDataset(index, data, class_name,
+        return SVHNDataset(index, data, class_name,
             transform=transform, target_transform=target_transform)
 
     @property
@@ -176,65 +177,24 @@ class AirCraftClassDataset(ClassDataset):
             return
 
         chunkSize = 1024
-        r = requests.get(self.tar_url, stream=True)
-        with open(self.root+'/fgvc-aircraft-2013b.tar.gz', 'wb') as f:
+        r = requests.get(self.test_url, stream=True)
+        with open(self.root+'/test_32x32.mat', 'wb') as f:
             pbar = tqdm( unit="B", total=int( r.headers['Content-Length'] ) )
             for chunk in r.iter_content(chunk_size=chunkSize):
                 if chunk: # filter out keep-alive new chunks
                     pbar.update (len(chunk))
                     f.write(chunk)
 
-        filename = os.path.join(self.root, 'fgvc-aircraft-2013b.tar.gz')
-        with tarfile.open(filename, 'r') as f:
-            f.extractall(self.root)
-
-        splits = {}
-        splits['train'] = [
-            "A340-300", "A318", "Falcon 2000", "F-16A/B", "F/A-18", "C-130", 
-            "MD-80", "BAE 146-200", "777-200", "747-400", "Cessna 172", "An-12", 
-            "A330-300", "A321", "Fokker 100", "Fokker 50", "DHC-1", "Fokker 70", 
-            "A340-200", "DC-6", "747-200", "Il-76", "747-300", "Model B200", 
-            "Saab 340", "Cessna 560", "Dornier 328", "E-195", "ERJ 135", "747-100", 
-            "737-600", "C-47", "DR-400", "ATR-72", "A330-200", "727-200", "737-700", 
-            "PA-28", "ERJ 145", "737-300", "767-300", "737-500", "737-200", "DHC-6", 
-            "Falcon 900", "DC-3", "Eurofighter Typhoon", "Challenger 600", "Hawk T1", 
-            "A380", "777-300", "E-190", "DHC-8-100", "Cessna 525", "Metroliner", 
-            "EMB-120", "Tu-134", "Embraer Legacy 600", "Gulfstream IV", "Tu-154", 
-            "MD-87", "A300B4", "A340-600", "A340-500", "MD-11", "707-320", 
-            "Cessna 208", "Global Express", "A319", "DH-82"
-            ]
-        splits['test'] = [
-            "737-400", "737-800", "757-200", "767-400", "ATR-42", "BAE-125", 
-            "Beechcraft 1900", "Boeing 717", "CRJ-200", "CRJ-700", "E-170", 
-            "L-1011", "MD-90", "Saab 2000", "Spitfire"
-            ]
-        splits['val'] = [
-            "737-900", "757-300", "767-200", "A310", "A320", "BAE 146-300", 
-            "CRJ-900", "DC-10", "DC-8", "DC-9-30", "DHC-8-300", "Gulfstream V", 
-            "SR-20", "Tornado", "Yak-42"
-            ]
-
-        # Cropping images with bounding box same as meta-dataset.
-        bboxes_path = os.path.join(self.root, 'fgvc-aircraft-2013b', 'data', 'images_box.txt')
-        with open(bboxes_path, 'r') as f:
-            names_to_bboxes = [line.split('\n')[0].split(' ') for line in f.readlines()]
-            names_to_bboxes = dict((name, map(int, (xmin, ymin, xmax, ymax))) for name, xmin, ymin, xmax, ymax in names_to_bboxes)
-            
-        # Retrieve mapping from filename to cls
-        cls_trainval_path = os.path.join(self.root, 'fgvc-aircraft-2013b', 'data', 'images_variant_trainval.txt')
-        with open(cls_trainval_path, 'r') as f:
-            filenames_to_clsnames = [line.split('\n')[0].split(' ', 1) for line in f.readlines()]
-
-        cls_test_path = os.path.join(self.root, 'fgvc-aircraft-2013b', 'data', 'images_variant_test.txt')
-        with open(cls_test_path, 'r') as f:
-            filenames_to_clsnames += [line.split('\n')[0].split(' ', 1) for line in f.readlines()]
-            
-        filenames_to_clsnames = dict(filenames_to_clsnames)
-        clss_to_names = collections.defaultdict(list)
-        for filename, cls in filenames_to_clsnames.items():
-            clss_to_names[cls].append(filename)
+        data = loadmat(self.root+'/test_32x32.mat')
+        x_lst = data['X'].transpose(3,0,1,2)
+        y_lst = data['y']
+        x_per_cls = [[] for _ in range(10)]
+        for i in range(len(y_lst)):
+            x = x_lst[i]
+            y = y_lst[i][0] - 1
+            x_per_cls[y].append(x)
                 
-        for split in ['train', 'val', 'test']:
+        for split in ['test']:
             filename = os.path.join(self.root, self.filename.format(split))
             labels_filename = os.path.join(self.root, self.filename_labels.format(split))
 
@@ -243,21 +203,10 @@ class AirCraftClassDataset(ClassDataset):
             pre_idx = 0
             post_idx = 0
 
-            for cls_id, cls_name in enumerate(tqdm(splits[split])):
+            for cls_id, cls_data in enumerate(tqdm(x_per_cls)):
                 pre_idx = post_idx
-
-                cls_data = []
-                for file in sorted(clss_to_names[cls_name]):
-                    file_path = os.path.join(self.root,
-                                            'fgvc-aircraft-2013b',
-                                            'data',
-                                            'images',
-                                            '{}.jpg'.format(file))
-                    img = Image.open(file_path)
-                    bbox = names_to_bboxes[file]
-                    img = np.asarray(img.crop(bbox).resize((32, 32)))
-                    cls_data.append(img)
                 cls_data = np.array(cls_data)
+                
                 if images.shape[0] == 0:
                     images = cls_data
                 else:
@@ -275,10 +224,10 @@ class AirCraftClassDataset(ClassDataset):
                 labels = sorted(list(classes.keys()))
                 json.dump(labels, f)
                 
-class AirCraftDataset(Dataset):
+class SVHNDataset(Dataset):
     def __init__(self, index, data, class_name,
                  transform=None, target_transform=None):
-        super(AirCraftDataset, self).__init__(index, transform=transform,
+        super(SVHNDataset, self).__init__(index, transform=transform,
                                                   target_transform=target_transform)
         self.data = data
         self.class_name = class_name
