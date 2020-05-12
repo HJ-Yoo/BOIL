@@ -199,6 +199,14 @@ class VggFlowerClassDataset(ClassDataset):
         with tarfile.open(filename, 'r') as f:
             f.extractall(self.root)
 
+        imagelabels_path = self.root+'/imagelabels.mat'
+        with open(imagelabels_path, 'rb') as f:
+            labels = loadmat(f)['labels'][0]
+
+        filepaths = collections.defaultdict(list)
+        for i, label in enumerate(labels):
+            filepaths[label].append(os.path.join(self.root+'/jpg', 'image_{:05d}.jpg'.format(i + 1)))
+        
         splits = {}
         splits['train'] = [
             "090.canna lily", "038.great masterwort", "080.anthurium", "030.sweet william",
@@ -219,7 +227,7 @@ class VggFlowerClassDataset(ClassDataset):
             "022.pincushion flower", "033.love in the mist", "087.magnolia", "001.pink primrose",
             "049.oxeye daisy", "020.giant white arum lily", "025.grape hyacinth", "058.geranium"
             ]
-        splits['val'] = [
+        splits['valid'] = [
             "010.globe thistle", "016.globe-flower", "017.purple coneflower", "023.fritillary",
             "026.corn poppy", "047.marigold", "053.primula", "056.bishop of llandaff", 
             "057.gaura", "062.japanese anemone", "082.clematis", "083.hibiscus", 
@@ -231,14 +239,6 @@ class VggFlowerClassDataset(ClassDataset):
             "045.bolero deep blue", "046.wallflower", "065.californian poppy", "085.desert-rose",
             "089.watercress", "094.foxglove", "096.camellia", "098.mexican petunia"
             ]
-
-        imagelabels_path = self.root+'/imagelabels.mat'
-        with open(imagelabels_path, 'rb') as f:
-            labels = loadmat(f)['labels'][0]
-
-        filepaths = collections.defaultdict(list)
-        for i, label in enumerate(labels):
-            filepaths[label].append(os.path.join(self.root+'/jpg', 'image_{:05d}.jpg'.format(i + 1)))
         
         for split in ['train', 'val', 'test']:
             filename = os.path.join(self.root, self.filename.format(split))

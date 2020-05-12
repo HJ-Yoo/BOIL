@@ -15,6 +15,7 @@ from scipy.io import loadmat
 
 from torchmeta.utils.data import Dataset, ClassDataset, CombinationMetaDataset
 from torchvision.datasets.utils import download_file_from_google_drive
+from torchmeta.datasets.utils import get_asset
 
 
 class AirCraft(CombinationMetaDataset):
@@ -122,6 +123,7 @@ class AirCraftClassDataset(ClassDataset):
         self.split_filename_labels = os.path.join(self.root,
             self.filename_labels.format(self.meta_split))
 
+        self._data_file = None
         self._data = None
         self._labels = None
 
@@ -133,12 +135,12 @@ class AirCraftClassDataset(ClassDataset):
         self._num_classes = len(self.labels)
 
     def __getitem__(self, index):
-        class_name = self.labels[index % self.num_classes]
-        data = self.data[class_name]
+        label = self.labels[index % self.num_classes]
+        data = self.data[label]
         transform = self.get_transform(index, self.transform)
         target_transform = self.get_target_transform(index)
 
-        return AirCraftDataset(index, data, class_name,
+        return AirCraftDataset(index, data, label,
             transform=transform, target_transform=target_transform)
 
     @property
@@ -175,44 +177,18 @@ class AirCraftClassDataset(ClassDataset):
         if self._check_integrity():
             return
 
-        chunkSize = 1024
-        r = requests.get(self.tar_url, stream=True)
-        with open(self.root+'/fgvc-aircraft-2013b.tar.gz', 'wb') as f:
-            pbar = tqdm( unit="B", total=int( r.headers['Content-Length'] ) )
-            for chunk in r.iter_content(chunk_size=chunkSize):
-                if chunk: # filter out keep-alive new chunks
-                    pbar.update (len(chunk))
-                    f.write(chunk)
+#         chunkSize = 1024
+#         r = requests.get(self.tar_url, stream=True)
+#         with open(self.root+'/fgvc-aircraft-2013b.tar.gz', 'wb') as f:
+#             pbar = tqdm( unit="B", total=int( r.headers['Content-Length'] ) )
+#             for chunk in r.iter_content(chunk_size=chunkSize):
+#                 if chunk: # filter out keep-alive new chunks
+#                     pbar.update (len(chunk))
+#                     f.write(chunk)
 
-        filename = os.path.join(self.root, 'fgvc-aircraft-2013b.tar.gz')
-        with tarfile.open(filename, 'r') as f:
-            f.extractall(self.root)
-
-        splits = {}
-        splits['train'] = [
-            "A340-300", "A318", "Falcon 2000", "F-16A/B", "F/A-18", "C-130", 
-            "MD-80", "BAE 146-200", "777-200", "747-400", "Cessna 172", "An-12", 
-            "A330-300", "A321", "Fokker 100", "Fokker 50", "DHC-1", "Fokker 70", 
-            "A340-200", "DC-6", "747-200", "Il-76", "747-300", "Model B200", 
-            "Saab 340", "Cessna 560", "Dornier 328", "E-195", "ERJ 135", "747-100", 
-            "737-600", "C-47", "DR-400", "ATR-72", "A330-200", "727-200", "737-700", 
-            "PA-28", "ERJ 145", "737-300", "767-300", "737-500", "737-200", "DHC-6", 
-            "Falcon 900", "DC-3", "Eurofighter Typhoon", "Challenger 600", "Hawk T1", 
-            "A380", "777-300", "E-190", "DHC-8-100", "Cessna 525", "Metroliner", 
-            "EMB-120", "Tu-134", "Embraer Legacy 600", "Gulfstream IV", "Tu-154", 
-            "MD-87", "A300B4", "A340-600", "A340-500", "MD-11", "707-320", 
-            "Cessna 208", "Global Express", "A319", "DH-82"
-            ]
-        splits['test'] = [
-            "737-400", "737-800", "757-200", "767-400", "ATR-42", "BAE-125", 
-            "Beechcraft 1900", "Boeing 717", "CRJ-200", "CRJ-700", "E-170", 
-            "L-1011", "MD-90", "Saab 2000", "Spitfire"
-            ]
-        splits['val'] = [
-            "737-900", "757-300", "767-200", "A310", "A320", "BAE 146-300", 
-            "CRJ-900", "DC-10", "DC-8", "DC-9-30", "DHC-8-300", "Gulfstream V", 
-            "SR-20", "Tornado", "Yak-42"
-            ]
+#         filename = os.path.join(self.root, 'fgvc-aircraft-2013b.tar.gz')
+#         with tarfile.open(filename, 'r') as f:
+#             f.extractall(self.root)
 
         # Cropping images with bounding box same as meta-dataset.
         bboxes_path = os.path.join(self.root, 'fgvc-aircraft-2013b', 'data', 'images_box.txt')
@@ -224,7 +200,7 @@ class AirCraftClassDataset(ClassDataset):
         cls_trainval_path = os.path.join(self.root, 'fgvc-aircraft-2013b', 'data', 'images_variant_trainval.txt')
         with open(cls_trainval_path, 'r') as f:
             filenames_to_clsnames = [line.split('\n')[0].split(' ', 1) for line in f.readlines()]
-
+            
         cls_test_path = os.path.join(self.root, 'fgvc-aircraft-2013b', 'data', 'images_variant_test.txt')
         with open(cls_test_path, 'r') as f:
             filenames_to_clsnames += [line.split('\n')[0].split(' ', 1) for line in f.readlines()]
@@ -236,59 +212,46 @@ class AirCraftClassDataset(ClassDataset):
                 
         for split in ['train', 'val', 'test']:
             filename = os.path.join(self.root, self.filename.format(split))
+            labels = get_asset(self.folder, '{}.json'.format(split))
             labels_filename = os.path.join(self.root, self.filename_labels.format(split))
-
-            images = np.array([])
-            classes = {}
-            pre_idx = 0
-            post_idx = 0
-
-            for cls_id, cls_name in enumerate(tqdm(splits[split])):
-                pre_idx = post_idx
-
-                cls_data = []
-                for file in sorted(clss_to_names[cls_name]):
-                    file_path = os.path.join(self.root,
-                                            'fgvc-aircraft-2013b',
-                                            'data',
-                                            'images',
-                                            '{}.jpg'.format(file))
-                    img = Image.open(file_path)
-                    bbox = names_to_bboxes[file]
-                    img = np.asarray(img.crop(bbox).resize((32, 32)))
-                    cls_data.append(img)
-                cls_data = np.array(cls_data)
-                if images.shape[0] == 0:
-                    images = cls_data
-                else:
-                    images = np.concatenate((images, cls_data), axis=0)
-
-                post_idx = pre_idx + len(cls_data)
-                classes[str(cls_id)] = list(range(pre_idx, post_idx))
+            
+            with open(labels_filename, 'w') as f:
+                json.dump(labels, f)
 
             with h5py.File(filename, 'w') as f:
                 group = f.create_group('datasets')
-                for name, indices in classes.items():
-                    group.create_dataset(name, data=images[indices])
-
-            with open(labels_filename, 'w') as f:
-                labels = sorted(list(classes.keys()))
-                json.dump(labels, f)
+                for i, label in enumerate(tqdm(labels, desc=filename)):
+                    images = []
+                    for file in clss_to_names[label]:
+                        file_path = os.path.join(self.root,
+                                                'fgvc-aircraft-2013b',
+                                                'data',
+                                                'images',
+                                                '{}.jpg'.format(file))
+                        img = Image.open(file_path)
+                        bbox = names_to_bboxes[file]
+                        img = np.asarray(img.crop(bbox).resize((32, 32)), dtype=np.uint8)
+                        images.append(img)
+                        
+                    dataset = group.create_dataset(label, (len(images), 32, 32, 3))
+                    
+                    for j, image in enumerate(images):
+                        dataset[j] = image
                 
 class AirCraftDataset(Dataset):
-    def __init__(self, index, data, class_name,
+    def __init__(self, index, data, label,
                  transform=None, target_transform=None):
         super(AirCraftDataset, self).__init__(index, transform=transform,
                                                   target_transform=target_transform)
         self.data = data
-        self.class_name = class_name
+        self.label = label
 
     def __len__(self):
-        return self.data.shape[0]
+        return len(self.data)
 
     def __getitem__(self, index):
-        image = Image.fromarray(self.data[index])
-        target = self.class_name
+        image = Image.fromarray(self.data[index].astype(np.uint8)).convert('RGB')
+        target = self.label
 
         if self.transform is not None:
             image = self.transform(image)
