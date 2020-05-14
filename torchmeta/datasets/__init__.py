@@ -11,6 +11,7 @@ from torchmeta.datasets.vgg_flower import VggFlower
 from torchmeta.datasets.aircraft import AirCraft
 from torchmeta.datasets.traffic_sign import TrafficSign
 from torchmeta.datasets.svhn import SVHN
+from torchmeta.datasets.cars import CARS
 
 from torchmeta.datasets import helpers
 
@@ -28,5 +29,6 @@ __all__ = [
     'AirCraft',
     'TrafficSign',
     'SVHN',
+    'CARS',
     'helpers'
 ]

@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 
 from maml.model import ConvNet, BasicBlock, BasicBlockWithoutResidual, ResNet
-from torchmeta.datasets.helpers import miniimagenet, tieredimagenet, cifar_fs, fc100, cub, vgg_flower, aircraft, traffic_sign, svhn
+from torchmeta.datasets.helpers import (miniimagenet, tieredimagenet, cifar_fs, fc100,
+                                        cub, vgg_flower, aircraft, traffic_sign, svhn, cars)
 from collections import OrderedDict
 
 def load_dataset(args, mode):
@@ -116,10 +117,21 @@ def load_dataset(args, mode):
                                meta_val=args.meta_val,
                                meta_test=args.meta_test,
                                download=download)
+    elif args.dataset == 'cars':
+        dataset = cars(folder=folder,
+                               shots=shots,
+                               ways=ways,
+                               shuffle=shuffle,
+                               test_shots=test_shots,
+                               meta_train=args.meta_train,
+                               meta_val=args.meta_val,
+                               meta_test=args.meta_test,
+                               download=download)
+        
     return dataset
 
 def load_model(args):
-    if args.dataset == 'miniimagenet' or args.dataset == 'tieredimagenet' or args.dataset == 'cub':
+    if args.dataset == 'miniimagenet' or args.dataset == 'tieredimagenet' or args.dataset == 'cub' or args.dataset == 'cars':
         wh_size = 5
     elif args.dataset == 'cifar_fs' or args.dataset == 'fc100' or args.dataset == 'vgg_flower' or args.dataset == 'aircraft' or args.dataset == 'traffic_sign' or args.dataset == 'svhn':
         wh_size = 2
