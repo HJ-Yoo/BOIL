@@ -1,0 +1,33 @@
+{
+  "env-name": "HalfCheetahDir-v2",
+  "env-kwargs": {
+    "normalization_scale": 10.0,
+    "max_episode_steps": 100
+  },
+  "gamma": 0.99,
+  "gae-lambda": 1.0,
+  "first-order": false,
+  "hidden-sizes": [
+    64,
+    64
+  ],
+  "nonlinearity": "tanh",
+  "fast-batch-size": 20,
+  "num-steps": 1,
+  "fast-lr": 0.1,
+  "num-batches": 500,
+  "meta-batch-size": 40,
+  "max-kl": 0.01,
+  "cg-iters": 10,
+  "cg-damping": 1e-05,
+  "ls-max-steps": 15,
+  "ls-backtrack-ratio": 0.8,
+  "config": "configs/maml/halfcheetah-dir.yaml",
+  "extractor_inner_step_size": 0.1,
+  "classifier_inner_step_size": 0.1,
+  "output_folder": "./output/maml-halfcheetah-dir",
+  "seed": 1,
+  "num_workers": 16,
+  "use_cuda": false,
+  "device": "cpu"
+}
