@@ -25,7 +25,7 @@ def load_dataset(args, mode):
     elif mode == 'meta_test':
         args.meta_train = False
         args.meta_val = False
-        args.meta_test = True
+        args.meta_test = True  
     
     if args.dataset == 'miniimagenet':
         dataset = miniimagenet(folder=folder,
@@ -136,7 +136,7 @@ def load_model(args):
     elif args.dataset == 'cifar_fs' or args.dataset == 'fc100' or args.dataset == 'vgg_flower' or args.dataset == 'aircraft' or args.dataset == 'traffic_sign' or args.dataset == 'svhn':
         wh_size = 2
         
-    if args.model == '4conv' or args.model == 'smallconv':
+    if args.model == '4conv':
         model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, wh_size=wh_size)
     elif args.model == 'resnet':
         if args.blocks_type == 'a':

@@ -9,7 +9,27 @@ from tqdm import tqdm
 
 from torchmeta.utils.data import BatchMetaDataLoader
 from maml.utils import load_dataset, load_model, update_parameters, get_accuracy
+
+def project_vec(u, v):
+    utu = sum(u*u)
+    utv = sum(u*v)
+    return (utv/utu)*u
+
+def gs(X):
+    # Gram-Schmidt function
+    Q = np.zeros(X.shape, dtype=X.dtype)
     
+    Q[0] = X[0]
+    Q[1] = X[1] - project_vec(Q[0], X[1])
+    Q[2] = X[2] - project_vec(Q[0], X[2]) - project_vec(Q[1], X[2])
+    Q[3] = X[3] - project_vec(Q[0], X[3]) - project_vec(Q[1], X[3]) - project_vec(Q[2], X[3])
+    Q[4] = X[4] - project_vec(Q[0], X[4]) - project_vec(Q[1], X[4]) - project_vec(Q[2], X[4]) - project_vec(Q[3], X[4])
+
+    Q = torch.tensor(Q).type(torch.FloatTensor)
+    Q = Q / torch.norm(Q, dim=1, keepdim=True)
+    
+    return Q
+
 def main(args, mode, iteration=None):
     dataset = load_dataset(args, mode)
     dataloader = BatchMetaDataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
@@ -19,10 +39,14 @@ def main(args, mode, iteration=None):
     
     # To control outer update parameter
     # If you want to control inner update parameter, please see update_parameters function in ./maml/utils.py
-    freeze_params = [p for name, p in model.named_parameters() if 'classifier' not in name]
-    learnable_params = [p for name, p in model.named_parameters() if 'classifier' in name]
-    meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': args.meta_lr},
-                                       {'params': learnable_params, 'lr': args.meta_lr}]) 
+    freeze_params = [p for name, p in model.named_parameters() if 'classifier' in name]
+    learnable_params = [p for name, p in model.named_parameters() if 'classifier' not in name]
+    if args.outer_fix:
+        meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': 0},
+                                           {'params': learnable_params, 'lr': args.meta_lr}])
+    else:
+        meta_optimizer = torch.optim.Adam([{'params': freeze_params, 'lr': args.meta_lr},
+                                           {'params': learnable_params, 'lr': args.meta_lr}])
     
     if args.meta_train:
         total = args.train_batches
@@ -36,6 +60,10 @@ def main(args, mode, iteration=None):
     # Training loop
     with tqdm(dataloader, total=total, leave=False) as pbar:
         for batch_idx, batch in enumerate(pbar):
+            if args.centering:
+                fc_weight_mean = torch.mean(model.classifier.weight.data, dim=0)
+                model.classifier.weight.data -= fc_weight_mean
+                
             model.zero_grad()
             
             support_inputs, support_targets = batch['train']
@@ -61,9 +89,6 @@ def main(args, mode, iteration=None):
                                            classifier_step_size=args.classifier_step_size,
                                            first_order=args.first_order)
                 
-                # if args.meta_val or args.meta_test:
-                #     model.eval()
-
                 query_features, query_logit = model(query_input, params=params)
                 outer_loss += F.cross_entropy(query_logit, query_target)
                 
@@ -100,8 +125,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Model-Agnostic Meta-Learning (MAML)')
     
     parser.add_argument('--folder', type=str, help='Path to the folder the data is downloaded to.')
-    parser.add_argument('--dataset', type=str, help='Dataset: miniimagenet, tieredimagenet, cifar_fs, fc100')
-    parser.add_argument('--model', type=str, help='Model: smallconv, largeconv, resnet')
+    parser.add_argument('--dataset', type=str, help='Dataset: miniimagenet, tieredimagenet, cub, cars, cifar_fs, fc100, aircraft, vgg_flower')
+    parser.add_argument('--model', type=str, help='Model: 4conv, resnet')
     parser.add_argument('--device', type=str, default='cuda:0', help='gpu device')
     parser.add_argument('--download', action='store_true', help='Download the dataset in the data folder.')
     parser.add_argument('--num-shots', type=int, default=5, help='Number of examples per class (k in "k-shot", default: 5).')
@@ -111,18 +136,22 @@ if __name__ == '__main__':
     parser.add_argument('--first-order', action='store_true', help='Use the first-order approximation of MAML.')
     parser.add_argument('--extractor-step-size', type=float, default=0.5, help='Extractor step-size for the gradient step for adaptation (default: 0.5).')
     parser.add_argument('--classifier-step-size', type=float, default=0.5, help='Classifier step-size for the gradient step for adaptation (default: 0.5).')
-    parser.add_argument('--hidden-size', type=int, default=32, help='Number of channels for each convolutional layer (default: 64).')
+    parser.add_argument('--hidden-size', type=int, default=64, help='Number of channels for each convolutional layer (default: 64).')
     parser.add_argument('--blocks-type', type=str, default=None, help='Resnet block type (optional).')
     
     parser.add_argument('--output-folder', type=str, default='./output/', help='Path to the output folder for saving the model (optional).')
     parser.add_argument('--save-name', type=str, default=None, help='Name of model (optional).')
     parser.add_argument('--batch-size', type=int, default=4, help='Number of tasks in a mini-batch of tasks (default: 4).')
-    parser.add_argument('--batch-iter', type=int, default=600, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 600).')
+    parser.add_argument('--batch-iter', type=int, default=300, help='Number of times to repeat train batches (i.e., total epochs = batch_iter * train_batches) (default: 300).')
     parser.add_argument('--train-batches', type=int, default=100, help='Number of batches the model is trained over (i.e., validation save steps) (default: 100).')
     parser.add_argument('--valid-batches', type=int, default=25, help='Number of batches the model is validated over (default: 25).')
     parser.add_argument('--test-batches', type=int, default=2500, help='Number of batches the model is tested over (default: 2500).')
     parser.add_argument('--num-workers', type=int, default=1, help='Number of workers for data loading (default: 1).')
-        
+    
+    parser.add_argument('--centering', action='store_true', help='Parallel shift operation in the head.')
+    parser.add_argument('--ortho-init', action='store_true', help='Use the head from the orthononal model.')
+    parser.add_argument('--outer-fix', action='store_true', help='Fix the head during outer updates.')
+    
     args = parser.parse_args()  
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs'), exist_ok=True)
     os.makedirs(os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'models'), exist_ok=True)
@@ -137,6 +166,12 @@ if __name__ == '__main__':
     args.device = torch.device(args.device)  
     model = load_model(args)
         
+    if args.ortho_init:
+        X = np.random.randn(5, 1600)
+        Q = gs(X)
+        
+        model.classifier.weight.data = nn.Parameter(Q)
+    
     log_pd = pd.DataFrame(np.zeros([args.batch_iter*args.train_batches, 6]),
                           columns=['train_error', 'train_accuracy', 'valid_error', 'valid_accuracy', 'test_error', 'test_accuracy'])
 
