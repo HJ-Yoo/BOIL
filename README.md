@@ -1,110 +1,255 @@
-# Torchmeta
-[![PyPI](https://img.shields.io/pypi/v/torchmeta)](https://pypi.org/project/torchmeta/) [![Build Status](https://travis-ci.com/tristandeleu/pytorch-meta.svg?branch=master)](https://travis-ci.com/tristandeleu/pytorch-meta) [![Documentation](https://img.shields.io/badge/docs-torchmeta-blue)](https://tristandeleu.github.io/pytorch-meta/)
+# Does MAML really want feature reuse only?
 
-A collection of extensions and data-loaders for few-shot learning & meta-learning in [PyTorch](https://pytorch.org/). Torchmeta contains popular meta-learning benchmarks, fully compatible with both [`torchvision`](https://pytorch.org/docs/stable/torchvision/index.html) and PyTorch's [`DataLoader`](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
+This repository is the official implementation of "Does MAML really want feature reuse only?"
+Our implementations are relied on [Torchmeta](https://github.com/tristandeleu/pytorch-meta). 
 
-#### Features
-  - A unified interface for both few-shot classification and regression problems, to allow easy benchmarking on multiple problems and reproducibility.
-  - Helper functions for some popular problems, with default arguments from the literature.
-  - An thin extension of PyTorch's [`Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module), called `MetaModule`, that simplifies the creation of certain meta-learning models (e.g. gradient based meta-learning methods). See the [MAML example](examples/maml) for an example using `MetaModule`.
+## Requirements
 
-#### Datasets available
-  - **Few-shot regression** (toy problems):
-    - Sine waves ([Finn et al., 2017](https://arxiv.org/abs/1703.03400))
-    - Harmonic functions ([Lacoste et al., 2018](https://arxiv.org/abs/1806.07528))
-    - Sinusoid & lines ([Finn et al., 2018](https://arxiv.org/abs/1806.02817))
-  - **Few-shot classification** (image classification):
-    - Omniglot ([Lake et al., 2015](http://www.sciencemag.org/content/350/6266/1332.short)[, 2019](https://arxiv.org/abs/1902.03477))
-    - Mini-ImageNet ([Vinyals et al., 2016](https://arxiv.org/abs/1606.04080), [Ravi et al., 2017](https://openreview.net/forum?id=rJY0-Kcll))
-    - Tiered-ImageNet ([Ren et al., 2018](https://arxiv.org/abs/1803.00676))
-    - CIFAR-FS ([Bertinetto et al., 2018](https://arxiv.org/abs/1805.08136))
-    - Fewshot-CIFAR100 ([Oreshkin et al., 2018](https://arxiv.org/abs/1805.10123))
-    - Caltech-UCSD Birds ([Hilliard et al., 2019](https://arxiv.org/abs/1802.04376), [Wah et al., 2019](http://www.vision.caltech.edu/visipedia/CUB-200-2011.html))
-    - Double MNIST ([Sun, 2019](https://github.com/shaohua0116/MultiDigitMNIST))
-    - Triple MNIST ([Sun, 2019](https://github.com/shaohua0116/MultiDigitMNIST))
+We run our code in the following environment using Anaconda.
 
-## Installation
-You can install Torchmeta either using Python's package manager pip, or from source. To avoid any conflict with your existing Python setup, it is suggested to work in a virtual environment with [`virtualenv`](https://docs.python-guide.org/dev/virtualenvs/). To install `virtualenv`:
-```bash
-pip install --upgrade virtualenv
-virtualenv venv
-source venv/bin/activate
+- Python >= 3.5
+- Pytorch == 1.4
+- torchvision == 0.5
+
+If you use Pytorch version above 1.5 (which is the latest version at this moment) and torchvision above 0.6, you may encounter problem. In that case, you are encouraged to change to the version in our environment.
+
+To install requirements:
+
+```setup
+pip install -r requirements.txt
 ```
 
-#### Requirements
- - Python 3.5 or above
- - PyTorch 1.3 or above
- - Torchvision 0.4 or above
+## Training
 
-#### Using pip
-This is the recommended way to install Torchmeta:
-```bash
-pip install torchmeta
+If you want to train 4conv network in the paper, run this command:
+
+```train
+./run_4conv.sh
 ```
 
-#### From source
-You can also install Torchmeta from source. This is recommended if you want to contribute to Torchmeta.
-```bash
-git clone https://github.com/tristandeleu/pytorch-meta.git
-cd pytorch-meta
-python setup.py install
+If you want to train ResNet-12 in the paper, run this command:
+
+```train
+./run_resnet.sh
 ```
 
-## Example
-
-#### Minimal example
-This minimal example below shows how to create a dataloader for the 5-shot 5-way Omniglot dataset with Torchmeta. The dataloader loads a batch of randomly generated tasks, and all the samples are concatenated into a single tensor. For more examples, check the [examples](examples/) folder.
-```python
-from torchmeta.datasets.helpers import omniglot
-from torchmeta.utils.data import BatchMetaDataLoader
-
-dataset = omniglot("data", ways=5, shots=5, test_shots=15, meta_train=True, download=True)
-dataloader = BatchMetaDataLoader(dataset, batch_size=16, num_workers=4)
-
-for batch in dataloader:
-    train_inputs, train_targets = batch["train"]
-    print('Train inputs shape: {0}'.format(train_inputs.shape))    # (16, 25, 1, 28, 28)
-    print('Train targets shape: {0}'.format(train_targets.shape))  # (16, 25)
-
-    test_inputs, test_targets = batch["test"]
-    print('Test inputs shape: {0}'.format(test_inputs.shape))      # (16, 75, 1, 28, 28)
-    print('Test targets shape: {0}'.format(test_targets.shape))    # (16, 75)
+If you want to see and change the arguments of training code, run this command:
+```
+python3 main.py --help
 ```
 
-#### Advanced example
-Helper functions are only available for some of the datasets available. However, all of them are available through the unified interface provided by Torchmeta. The variable `dataset` defined above is equivalent to the following
-```python
-from torchmeta.datasets import Omniglot
-from torchmeta.transforms import Categorical, ClassSplitter, Rotation
-from torchvision.transforms import Compose, Resize, ToTensor
-from torchmeta.utils.data import BatchMetaDataLoader
+## Evaluation
 
-dataset = Omniglot("data",
-                   # Number of ways
-                   num_classes_per_task=5,
-                   # Resize the images to 28x28 and converts them to PyTorch tensors (from Torchvision)
-                   transform=Compose([Resize(28), ToTensor()]),
-                   # Transform the labels to integers (e.g. ("Glagolitic/character01", "Sanskrit/character14", ...) to (0, 1, ...))
-                   target_transform=Categorical(num_classes=5),
-                   # Creates new virtual classes with rotated versions of the images (from Santoro et al., 2016)
-                   class_augmentations=[Rotation([90, 180, 270])],
-                   meta_train=True,
-                   download=True)
-dataset = ClassSplitter(dataset, shuffle=True, num_train_per_class=5, num_test_per_class=15)
-dataloader = BatchMetaDataLoader(dataset, batch_size=16, num_workers=4)
-```
-Note that the dataloader, receiving the dataset, remains the same.
+To evaluate the model(s) and see the results, please refer to the `analysis.ipynb`
 
-## Citation
-> Tristan Deleu, Tobias Würfl, Mandana Samiei, Joseph Paul Cohen, and Yoshua Bengio. Torchmeta: A Meta-Learning library for PyTorch, 2019 [[ArXiv](https://arxiv.org/abs/1909.06576)]
 
-If you want to cite Torchmeta, use the following Bibtex entry:
-```
-@misc{deleu2019torchmeta,
-  title={{Torchmeta: A Meta-Learning library for PyTorch}},
-  author={Deleu, Tristan and W\"urfl, Tobias and Samiei, Mandana and Cohen, Joseph Paul and Bengio, Yoshua},
-  year={2019},
-  url={https://arxiv.org/abs/1909.06576},
-  note={Available at: https://github.com/tristandeleu/pytorch-meta}
-}
-```
+## Results
+
+All results were reproduced by our group and reported as the average and standard deviation of the accuracies over 5x1000 tasks.
+
+The values in parenthesis are the number of shots.
+
+### 1. 5-Way k-shot test accuracy (%) of 4conv network on various benchmark dataset.
+
+<table align="center" style="margin: 0px auto;">
+    <tr>
+        <td>Domain</td>
+        <td colspan="2">General Domain</td>
+        <td colspan="2">Specific Domain</td> 
+    </tr>
+    <tr>
+        <td>Dataset</td>
+        <td>miniImageNet</td>
+        <td>tieredImageNet</td>
+        <td>CUB</td>
+        <td>Cars</td>
+    </tr>
+    <tr>
+        <td>MAML(1)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?48.47 \pm 0.26" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?48.80 \pm 0.34" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?53.70 \pm 0.42" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?38.16 \pm 0.20" /></td>
+    </tr>
+    <tr>
+        <td>BOIL(1)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?49.65 \pm 0.19" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?50.00 \pm 0.35" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?60.45 \pm 0.45" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?65.11 \pm 0.36" /></td>
+    </tr>
+    <tr>
+        <td>MAML(5)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?60.36 \pm 0.25" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?64.27 \pm 0.27" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?65.11 \pm 0.07" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?45.36 \pm 0.23" /></td>
+    </tr>
+    <tr>
+        <td>BOIL(5)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?65.32 \pm 0.34" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?69.64 \pm 0.20" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?74.12 \pm 0.24" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?65.70 \pm 0.17" /></td>
+    </tr>
+</table>
+
+
+### 2. 5-Way k-shot test accuracy (%) of 4conv network on cross-domain adaptation.
+
+<table align="center" style="margin: 0px auto;">
+    <tr>
+        <td>Adaptation</td>
+        <td colspan="2">General to general</td>
+        <td colspan="2">General to Specific</td> 
+    </tr>
+    <tr>
+        <td>Meta-train</td>
+        <td>tieredImageNet</td>
+        <td>miniImageNet</td>
+        <td>miniImageNet</td>
+        <td>miniImageNet</td>
+    </tr>
+    <tr>
+        <td>Meta-test</td>
+        <td>miniImageNet</td>
+        <td>tieredImageNet</td>
+        <td>CUB</td>
+        <td>Cars</td>
+    </tr>
+    <tr>
+        <td>MAML(1)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?49.45 \pm 0.31" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?52.31 \pm 0.33" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?40.36 \pm 0.12" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?35.27 \pm 0.11" /></td>
+    </tr>
+    <tr>
+        <td>BOIL(1)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?51.35 \pm 0.18" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?54.09 \pm 0.41" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?44.38 \pm 0.11" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?37.16 \pm 0.35" /></td>
+    </tr>
+    <tr>
+        <td>MAML(5)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?65.31 \pm 0.12" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?64.88 \pm 0.28" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?51.34 \pm 0.24" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?44.29 \pm 0.28" /></td>
+    </tr>
+    <tr>
+        <td>BOIL(5)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?70.76 \pm 0.14" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?68.97 \pm 0.24" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?60.11 \pm 0.32" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?50.92 \pm 0.22" /></td>
+    </tr>
+</table>
+
+---
+
+<table align="center" style="margin: 0px auto;">
+    <tr>
+        <td>Adaptation</td>
+        <td colspan="2">Specific to general</td>
+        <td colspan="2">Specific to Specific</td> 
+    </tr>
+    <tr>
+        <td>Meta-train</td>
+        <td>CUB</td>
+        <td>CUB</td>
+        <td>Cars</td>
+        <td>CUB</td>
+    </tr>
+    <tr>
+        <td>Meta-test</td>
+        <td>miniImageNet</td>
+        <td>tieredImageNet</td>
+        <td>CUB</td>
+        <td>Cars</td>
+    </tr>
+    <tr>
+        <td>MAML(1)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?31.11 \pm 0.21" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?34.14 \pm 0.29" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?26.27 \pm 0.10" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?31.08 \pm 0.18" /></td>
+    </tr>
+    <tr>
+        <td>BOIL(1)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?35.11 \pm 0.27" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?37.88 \pm 0.23" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?33.13 \pm 0.29" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?34.51 \pm 0.13" /></td>
+    </tr>
+    <tr>
+        <td>MAML(5)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?38.74 \pm 0.17" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?42.11 \pm 0.23" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?30.50 \pm 0.21" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?39.74 \pm 0.19" /></td>
+    </tr>
+    <tr>
+        <td>BOIL(5)</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?47.63 \pm 0.29" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?49.96 \pm 0.10" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?42.52 \pm 0.12" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?43.73 \pm 0.23" /></td>
+    </tr>
+</table>
+
+### 3. 5-Way 5-shot test accuracy (%) of ResNet-12.
+
+<table align="center" style="margin: 0px auto;">
+    <tr>
+        <td>Meta-train</td>
+        <td colspan="3">miniImageNet</td>
+        <td colspan="3">CUB</td>
+    </tr>
+    <tr>
+        <td>Meta-test</td>
+        <td>miniImageNet</td>
+        <td>tieredImageNet</td>
+        <td>CUB</td>
+        <td>CUB</td>
+        <td>miniImageNet</td>
+        <td>Cars</td>
+    </tr>
+    <tr>
+        <td>MAML w/ lsc</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?67.96 \pm 0.28" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?71.56 \pm 0.29" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?55.61 \pm 0.43" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?77.51 \pm 0.17" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?42.34 \pm 0.16" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?37.97 \pm 0.29" /></td>
+    </tr>
+    <tr>
+        <td>MAML w/o lsc</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?66.03 \pm 0.18" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?69.43 \pm 0.22" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?52.10 \pm 0.21" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?70.90 \pm 0.31" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?37.32 \pm 0.25" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?33.94 \pm 0.31" /></td>
+    </tr>
+    <tr>
+        <td>BOIL w/ lsc</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?69.68 \pm 0.25" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?71.43 \pm 0.38" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?61.00 \pm 0.36" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?81.54 \pm 0.14" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?44.54 \pm 0.20" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?40.05 \pm 0.39" /></td>
+    </tr>
+    <tr>
+        <td>BOIL w/o lsc</td>
+        <td><img src="https://latex.codecogs.com/gif.latex?70.90 \pm 0.20" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?74.29 \pm 0.31" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?61.83 \pm 0.49" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?83.23 \pm 0.14" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?44.62 \pm 0.10" /></td>
+        <td><img src="https://latex.codecogs.com/gif.latex?40.86 \pm 0.35" /></td>
+    </tr>
+</table>
