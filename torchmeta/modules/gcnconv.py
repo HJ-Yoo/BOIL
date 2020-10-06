@@ -8,18 +8,18 @@ from torchmeta.modules.module import MetaModule
 class MetaGCNConv(gnn.GCNConv, MetaModule):
     __doc__ = gnn.GCNConv.__doc__
     
-#     def reset_parameters(self):
-#         init.xavier_uniform_(self.weight)
-#         init.zeros_(self.bias)
-#         self.cached_result = None
-#         self.cached_num_edges = None
+    def reset_parameters(self):
+        init.xavier_uniform_(self.weight)
+        init.zeros_(self.bias)
+        self.cached_result = None
+        self.cached_num_edges = None
         
     def forward(self, x, edge_index, edge_weight=None, params=None):
-        self.normalize = False # 일단 normalize 끄고
+        self.normalize = False
         
         if params is None:
             params = OrderedDict(self.named_parameters())
-        bias = params.get('bias', None) # self.bias에 넣어야 update 될 거 같은데
+        bias = params.get('bias', None)
         
         x = torch.matmul(x, params['weight'])
         

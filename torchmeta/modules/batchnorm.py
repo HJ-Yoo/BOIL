@@ -10,7 +10,7 @@ class _MetaBatchNorm(_BatchNorm, MetaModule):
         self._check_input_dim(input)
         if params is None:
             params = OrderedDict(self.named_parameters())
-
+            
         # exponential_average_factor is self.momentum set to
         # (when it is available) only so that if gets updated
         # in ONNX graph when this node is exported to ONNX.

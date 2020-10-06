@@ -1,14 +1,10 @@
-import os
 import torch
-import torch.nn.functional as F
-import numpy as np
-import pandas as pd
-from tqdm import tqdm
-from collections import OrderedDict
-from torch.utils.data import DataLoader
+import torch.nn as nn
 
-from maml.model import OmniglotNet, MiniimagenetNet # TieredimagenetNet, Cifar_fsNet, CubNet, DoublemnistNet, TriplemnistNet
-from torchmeta.datasets.helpers import omniglot, miniimagenet, tieredimagenet, cifar_fs, cub, doublemnist, triplemnist
+from maml.model import ConvNet, BasicBlock, BasicBlockWithoutResidual, ResNet
+from torchmeta.datasets.helpers import (miniimagenet, tieredimagenet, cifar_fs, fc100,
+                                        cub, vgg_flower, aircraft, traffic_sign, svhn, cars)
+from collections import OrderedDict
 
 def load_dataset(args, mode):
     folder = args.folder
@@ -29,19 +25,9 @@ def load_dataset(args, mode):
     elif mode == 'meta_test':
         args.meta_train = False
         args.meta_val = False
-        args.meta_test = True
+        args.meta_test = True  
     
-    if args.dataset == 'omniglot':
-        dataset = omniglot(folder=folder,
-                           shots=shots,
-                           ways=ways,
-                           shuffle=shuffle,
-                           test_shots=test_shots,
-                           meta_train=args.meta_train,
-                           meta_val=args.meta_val,
-                           meta_test=args.meta_test,
-                           download=download)
-    elif args.dataset == 'miniimagenet':
+    if args.dataset == 'miniimagenet':
         dataset = miniimagenet(folder=folder,
                                shots=shots,
                                ways=ways,
@@ -71,6 +57,16 @@ def load_dataset(args, mode):
                            meta_val=args.meta_val,
                            meta_test=args.meta_test,
                            download=download)
+    elif args.dataset == 'fc100':
+        dataset = fc100(folder=folder,
+                        shots=shots,
+                        ways=ways,
+                        shuffle=shuffle,
+                        test_shots=test_shots,
+                        meta_train=args.meta_train,
+                        meta_val=args.meta_val,
+                        meta_test=args.meta_test,
+                        download=download)
     elif args.dataset == 'cub':
         dataset = cub(folder=folder,
                       shots=shots,
@@ -81,95 +77,83 @@ def load_dataset(args, mode):
                       meta_val=args.meta_val,
                       meta_test=args.meta_test,
                       download=download)
-    elif args.dataset == 'doublemnist':
-        dataset = doublemnist(folder=folder,
-                              shots=shots,
-                              ways=ways,
-                              shuffle=shuffle,
-                              test_shots=test_shots,
-                              meta_train=args.meta_train,
-                              meta_val=args.meta_val,
-                              meta_test=args.meta_test,
-                              download=download)
-    elif args.dataset == 'triplemnist':
-        dataset = triplemnist(folder=folder,
-                              shots=shots,
-                              ways=ways,
-                              shuffle=shuffle,
-                              test_shots=test_shots,
-                              meta_train=args.meta_train,
-                              meta_val=args.meta_val,
-                              meta_test=args.meta_test,
-                              download=download)
-    
+    elif args.dataset == 'vgg_flower':
+        dataset = vgg_flower(folder=folder,
+                             shots=shots,
+                             ways=ways,
+                             shuffle=shuffle,
+                             test_shots=test_shots,
+                             meta_train=args.meta_train,
+                             meta_val=args.meta_val,
+                             meta_test=args.meta_test,
+                             download=download)
+    elif args.dataset == 'aircraft':
+        dataset = aircraft(folder=folder,
+                           shots=shots,
+                           ways=ways,
+                           shuffle=shuffle,
+                           test_shots=test_shots,
+                           meta_train=args.meta_train,
+                           meta_val=args.meta_val,
+                           meta_test=args.meta_test,
+                           download=download)
+    elif args.dataset == 'traffic_sign':
+        dataset = traffic_sign(folder=folder,
+                               shots=shots,
+                               ways=ways,
+                               shuffle=shuffle,
+                               test_shots=test_shots,
+                               meta_train=args.meta_train,
+                               meta_val=args.meta_val,
+                               meta_test=args.meta_test,
+                               download=download)
+    elif args.dataset == 'svhn':
+        dataset = svhn(folder=folder,
+                               shots=shots,
+                               ways=ways,
+                               shuffle=shuffle,
+                               test_shots=test_shots,
+                               meta_train=args.meta_train,
+                               meta_val=args.meta_val,
+                               meta_test=args.meta_test,
+                               download=download)
+    elif args.dataset == 'cars':
+        dataset = cars(folder=folder,
+                               shots=shots,
+                               ways=ways,
+                               shuffle=shuffle,
+                               test_shots=test_shots,
+                               meta_train=args.meta_train,
+                               meta_val=args.meta_val,
+                               meta_test=args.meta_test,
+                               download=download)
+        
     return dataset
 
-def load_model(args, maml=True):
-    if args.dataset == 'omniglot':
-        model = OmniglotNet(1, args.num_ways, hidden_size=args.hidden_size)
-    elif args.dataset == 'miniimagenet':
-        model = MiniimagenetNet(3, args.num_ways if maml else 64, hidden_size=args.hidden_size)
-    elif args.dataset == 'tieredimagenet':
-        pass
-    elif args.dataset == 'cifar_fs':
-        pass
-    elif args.dataset == 'cub':
-        pass
-    elif args.dataset == 'doublemnist':
-        pass
-    elif args.dataset == 'triplemnist':
-        pass
-    
+def load_model(args):
+    if args.dataset == 'miniimagenet' or args.dataset == 'tieredimagenet' or args.dataset == 'cub' or args.dataset == 'cars':
+        wh_size = 5
+    elif args.dataset == 'cifar_fs' or args.dataset == 'fc100' or args.dataset == 'vgg_flower' or args.dataset == 'aircraft' or args.dataset == 'traffic_sign' or args.dataset == 'svhn':
+        wh_size = 2
+        
+    if args.model == '4conv':
+        model = ConvNet(in_channels=3, out_features=args.num_ways, hidden_size=args.hidden_size, wh_size=wh_size)
+    elif args.model == 'resnet':
+        if args.blocks_type == 'a':
+            blocks = [BasicBlock, BasicBlock, BasicBlock, BasicBlock]
+        elif args.blocks_type == 'b':
+            blocks = [BasicBlock, BasicBlock, BasicBlock, BasicBlockWithoutResidual]
+        elif args.blocks_type == 'c':
+            blocks = [BasicBlock, BasicBlock, BasicBlockWithoutResidual, BasicBlockWithoutResidual]
+        elif args.blocks_type == 'd':
+            blocks = [BasicBlock, BasicBlockWithoutResidual, BasicBlockWithoutResidual, BasicBlockWithoutResidual]
+        elif args.blocks_type == 'e':
+            blocks = [BasicBlockWithoutResidual, BasicBlockWithoutResidual, BasicBlockWithoutResidual, BasicBlockWithoutResidual]
+        
+        model = ResNet(blocks=blocks, keep_prob=1.0, avg_pool=True, drop_rate=0.0, out_features=args.num_ways, wh_size=1)
     return model
 
-def load_pretrained_model(args):
-    pretrained_model = load_model(args, maml=False)
-    pretrained_model_filename = os.path.join(args.output_folder, 'pretrained', '{}.pt'.format(args.save_name))
-
-    if not os.path.exists(pretrained_model_filename):
-        num_classes = 64
-        pretrained_model.to(device=args.device)
-        pretrained_model.train()
-        pretrained_model_optimizer = torch.optim.Adam(pretrained_model.parameters(), lr=0.01)
-
-        dataset = load_dataset(args, 'meta_train')
-        data = torch.cat([torch.from_numpy(np.array(dataset.dataset.__getitem__(i).data))/255. for i in range(num_classes)], dim=0).permute(0, 3, 1, 2).float()
-        labels = torch.tensor(sum([[i]*600 for i in range(num_classes)], []))
-
-        dataloader = DataLoader(dataset=list(zip(data,labels)), batch_size=128, shuffle=True)
-        for _ in tqdm(range(args.pretrain_epochs)):
-            for input, target in dataloader:
-                input = input.type(torch.FloatTensor).to(device=args.device)
-                target = target.type(torch.LongTensor).to(device=args.device)
-
-                features, logit = pretrained_model(input)
-                loss = F.cross_entropy(logit, target)
-
-                pretrained_model_optimizer.zero_grad()
-                loss.backward()
-                pretrained_model_optimizer.step()
-
-        with open(pretrained_model_filename, 'wb') as f:
-            state_dict = pretrained_model.state_dict()
-            torch.save(state_dict, f)
-
-    # Load pretrained model
-    pretrained_model.load_state_dict(torch.load(pretrained_model_filename), strict=True)
-    return pretrained_model.state_dict()
-
-def load_best_valid_model(args):
-    filename = os.path.join(args.output_folder, args.dataset+'_'+args.save_name, 'logs', 'logs.csv')
-    logs = pd.read_csv(filename)
-    if args.best_valid_error_test:
-        valid_logs = list(logs[logs['valid_error']!=0]['valid_error'])
-        best_valid_epoch = (valid_logs.index(min(valid_logs))+1)*50
-    else:
-        valid_logs = list(logs[logs['valid_accuracy']!=0]['valid_accuracy'])
-        best_valid_epoch = (valid_logs.index(max(valid_logs))+1)*50
-        
-    return torch.load('./output/miniimagenet_{}/models/epochs_{}.pt'.format(args.save_name, best_valid_epoch))
-
-def update_parameters(model, loss, step_size=0.5, first_order=False):
+def update_parameters(model, loss, extractor_step_size, classifier_step_size, first_order=False):
     """Update the parameters of the model, with one step of gradient descent.
 
     Parameters
@@ -194,8 +178,11 @@ def update_parameters(model, loss, step_size=0.5, first_order=False):
 
     params = OrderedDict()
     for (name, param), grad in zip(model.meta_named_parameters(), grads):
-        params[name] = param - step_size * grad
-
+        if 'classifier' in name: # To control inner update parameter
+            params[name] = param - classifier_step_size * grad
+        else:
+            params[name] = param - extractor_step_size * grad
+    
     return params
 
 def get_accuracy(logits, targets):
@@ -217,24 +204,3 @@ def get_accuracy(logits, targets):
     """
     _, predictions = torch.max(logits, dim=-1)
     return torch.mean(predictions.eq(targets).float())
-
-def graph_regularizer(features, labels=None, args=None):
-    features_dist_matrix = torch.cdist(features, features).detach()
-    centroid = torch.zeros([5, features.shape[1]])
-    
-    for i in range(5):
-        centroid[i] = torch.mean(features[torch.where(labels==i)[0],:], dim=0)
-
-    centroid_dist_matrix = torch.cdist(centroid, centroid).detach()
-    rank_centroid_matrix = 1 - (centroid_dist_matrix / torch.sum(torch.unique(centroid_dist_matrix))) * args.graph_gamma # gamma=1.0 일때, 0.85 ~ 1.0 
-    
-    edge_matrix = torch.zeros(features_dist_matrix.shape).to(args.device)
-    for i in range(args.num_ways):
-        for j in range(args.num_ways):
-            for k in range(args.num_shots):
-                for l in range(args.num_shots):
-                    edge_matrix[(5*i)+k][(5*j)+l] = rank_centroid_matrix[i][j]
-    
-    penalty = torch.sum(features_dist_matrix*edge_matrix)*args.graph_beta
-    
-    return torch.sum(penalty)

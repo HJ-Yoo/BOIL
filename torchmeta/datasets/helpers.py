@@ -1,6 +1,8 @@
 import warnings
+from PIL import Image
 
-from torchmeta.datasets import Omniglot, MiniImagenet, TieredImagenet, CIFARFS, CUB, DoubleMNIST, TripleMNIST
+from torchmeta.datasets import (Omniglot, MiniImagenet, TieredImagenet, CIFARFS, FC100, CUB, DoubleMNIST, TripleMNIST,
+                                VggFlower, AirCraft, TrafficSign, SVHN, CARS)
 from torchmeta.transforms import Categorical, ClassSplitter, Rotation
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor
 
@@ -11,7 +13,12 @@ __all__ = [
     'cifar_fs',
     'cub',
     'doublemnist',
-    'triplemnist'
+    'triplemnist',
+    'vgg_flower',
+    'aircraft',
+    'traffic_sign',
+    'svhn',
+    'cars'
 ]
 
 
@@ -205,9 +212,59 @@ def cifar_fs(folder, shots, ways, shuffle=True, test_shots=None,
     --------
     `datasets.cifar100.CIFARFS` : Meta-dataset for the CIFAR-FS dataset.
     """
+    
+    defaults = {
+        'transform': Compose([Resize(32), ToTensor()])
+    }
+    
     return helper_with_default(CIFARFS, folder, shots, ways,
                                shuffle=shuffle, test_shots=test_shots,
-                               seed=seed, defaults={}, **kwargs)
+                               seed=seed, defaults=defaults, **kwargs)
+
+def fc100(folder, shots, ways, shuffle=True, test_shots=None,
+          seed=None, **kwargs):
+    """Helper function to create a meta-dataset for the CIFAR-FS dataset.
+
+    Parameters
+    ----------
+    folder : string
+        Root directory where the dataset folder `cifar100` exists.
+
+    shots : int
+        Number of (training) examples per class in each task. This corresponds 
+        to `k` in `k-shot` classification.
+
+    ways : int
+        Number of classes per task. This corresponds to `N` in `N-way` 
+        classification.
+
+    shuffle : bool (default: `True`)
+        Shuffle the examples when creating the tasks.
+
+    test_shots : int, optional
+        Number of test examples per class in each task. If `None`, then the 
+        number of test examples is equal to the number of training examples per 
+        class.
+
+    seed : int, optional
+        Random seed to be used in the meta-dataset.
+
+    kwargs
+        Additional arguments passed to the `FC100` class.
+
+    See also
+    --------
+    `datasets.cifar100.FC100` : Meta-dataset for the FC100 dataset.
+    """
+    
+    defaults = {
+        'transform': Compose([Resize(32), ToTensor()])
+    }
+    
+    return helper_with_default(FC100, folder, shots, ways,
+                               shuffle=shuffle, test_shots=test_shots,
+                               seed=seed, defaults=defaults, **kwargs)
+
 
 def cub(folder, shots, ways, shuffle=True, test_shots=None,
         seed=None, **kwargs):
@@ -252,7 +309,7 @@ def cub(folder, shots, ways, shuffle=True, test_shots=None,
                         ToTensor()
                     ])
     }
-
+    
     return helper_with_default(CUB, folder, shots, ways,
                                shuffle=shuffle, test_shots=test_shots,
                                seed=seed, defaults=defaults, **kwargs)
@@ -335,3 +392,218 @@ def triplemnist(folder, shots, ways, shuffle=True, test_shots=None,
     return helper_with_default(TripleMNIST, folder, shots, ways,
                                shuffle=shuffle, test_shots=test_shots,
                                seed=seed, defaults={}, **kwargs)
+
+def vgg_flower(folder, shots, ways, shuffle=True, test_shots=None,
+                 seed=None, **kwargs):
+    """Helper function to create a meta-dataset for the Mini-Imagenet dataset.
+
+    Parameters
+    ----------
+    folder : string
+        Root directory where the dataset folder `miniimagenet` exists.
+
+    shots : int
+        Number of (training) examples per class in each task. This corresponds
+        to `k` in `k-shot` classification.
+
+    ways : int
+        Number of classes per task. This corresponds to `N` in `N-way`
+        classification.
+
+    shuffle : bool (default: `True`)
+        Shuffle the examples when creating the tasks.
+
+    test_shots : int, optional
+        Number of test examples per class in each task. If `None`, then the
+        number of test examples is equal to the number of training examples per
+        class.
+
+    seed : int, optional
+        Random seed to be used in the meta-dataset.
+
+    kwargs
+        Additional arguments passed to the `MiniImagenet` class.
+
+    See also
+    --------
+    `datasets.MiniImagenet` : Meta-dataset for the Mini-Imagenet dataset.
+    """
+    defaults = {
+        'transform': Compose([Resize(32), ToTensor()])
+    }
+
+    return helper_with_default(VggFlower, folder, shots, ways,
+                               shuffle=shuffle, test_shots=test_shots,
+                               seed=seed, defaults=defaults, **kwargs)
+
+def aircraft(folder, shots, ways, shuffle=True, test_shots=None,
+                 seed=None, **kwargs):
+    """Helper function to create a meta-dataset for the Mini-Imagenet dataset.
+
+    Parameters
+    ----------
+    folder : string
+        Root directory where the dataset folder `miniimagenet` exists.
+
+    shots : int
+        Number of (training) examples per class in each task. This corresponds
+        to `k` in `k-shot` classification.
+
+    ways : int
+        Number of classes per task. This corresponds to `N` in `N-way`
+        classification.
+
+    shuffle : bool (default: `True`)
+        Shuffle the examples when creating the tasks.
+
+    test_shots : int, optional
+        Number of test examples per class in each task. If `None`, then the
+        number of test examples is equal to the number of training examples per
+        class.
+
+    seed : int, optional
+        Random seed to be used in the meta-dataset.
+
+    kwargs
+        Additional arguments passed to the `MiniImagenet` class.
+
+    See also
+    --------
+    `datasets.MiniImagenet` : Meta-dataset for the Mini-Imagenet dataset.
+    """
+    defaults = {
+        'transform': Compose([Resize(32), ToTensor()])
+    }
+
+    return helper_with_default(AirCraft, folder, shots, ways,
+                               shuffle=shuffle, test_shots=test_shots,
+                               seed=seed, defaults=defaults, **kwargs)
+
+def traffic_sign(folder, shots, ways, shuffle=True, test_shots=None,
+                 seed=None, **kwargs):
+    """Helper function to create a meta-dataset for the Mini-Imagenet dataset.
+
+    Parameters
+    ----------
+    folder : string
+        Root directory where the dataset folder `miniimagenet` exists.
+
+    shots : int
+        Number of (training) examples per class in each task. This corresponds
+        to `k` in `k-shot` classification.
+
+    ways : int
+        Number of classes per task. This corresponds to `N` in `N-way`
+        classification.
+
+    shuffle : bool (default: `True`)
+        Shuffle the examples when creating the tasks.
+
+    test_shots : int, optional
+        Number of test examples per class in each task. If `None`, then the
+        number of test examples is equal to the number of training examples per
+        class.
+
+    seed : int, optional
+        Random seed to be used in the meta-dataset.
+
+    kwargs
+        Additional arguments passed to the `MiniImagenet` class.
+
+    See also
+    --------
+    `datasets.MiniImagenet` : Meta-dataset for the Mini-Imagenet dataset.
+    """
+    defaults = {
+        'transform': Compose([Resize(32), ToTensor()])
+    }
+
+    return helper_with_default(TrafficSign, folder, shots, ways,
+                               shuffle=shuffle, test_shots=test_shots,
+                               seed=seed, defaults=defaults, **kwargs)
+
+def svhn(folder, shots, ways, shuffle=True, test_shots=None,
+                 seed=None, **kwargs):
+    """Helper function to create a meta-dataset for the Mini-Imagenet dataset.
+
+    Parameters
+    ----------
+    folder : string
+        Root directory where the dataset folder `miniimagenet` exists.
+
+    shots : int
+        Number of (training) examples per class in each task. This corresponds
+        to `k` in `k-shot` classification.
+
+    ways : int
+        Number of classes per task. This corresponds to `N` in `N-way`
+        classification.
+
+    shuffle : bool (default: `True`)
+        Shuffle the examples when creating the tasks.
+
+    test_shots : int, optional
+        Number of test examples per class in each task. If `None`, then the
+        number of test examples is equal to the number of training examples per
+        class.
+
+    seed : int, optional
+        Random seed to be used in the meta-dataset.
+
+    kwargs
+        Additional arguments passed to the `MiniImagenet` class.
+
+    See also
+    --------
+    `datasets.MiniImagenet` : Meta-dataset for the Mini-Imagenet dataset.
+    """
+    defaults = {
+        'transform': Compose([Resize(32), ToTensor()])
+    }
+
+    return helper_with_default(SVHN, folder, shots, ways,
+                               shuffle=shuffle, test_shots=test_shots,
+                               seed=seed, defaults=defaults, **kwargs)
+
+def cars(folder, shots, ways, shuffle=True, test_shots=None,
+                 seed=None, **kwargs):
+    """Helper function to create a meta-dataset for the Mini-Imagenet dataset.
+
+    Parameters
+    ----------
+    folder : string
+        Root directory where the dataset folder `miniimagenet` exists.
+
+    shots : int
+        Number of (training) examples per class in each task. This corresponds
+        to `k` in `k-shot` classification.
+
+    ways : int
+        Number of classes per task. This corresponds to `N` in `N-way`
+        classification.
+
+    shuffle : bool (default: `True`)
+        Shuffle the examples when creating the tasks.
+
+    test_shots : int, optional
+        Number of test examples per class in each task. If `None`, then the
+        number of test examples is equal to the number of training examples per
+        class.
+
+    seed : int, optional
+        Random seed to be used in the meta-dataset.
+
+    kwargs
+        Additional arguments passed to the `MiniImagenet` class.
+
+    See also
+    --------
+    `datasets.MiniImagenet` : Meta-dataset for the Mini-Imagenet dataset.
+    """
+    defaults = {
+        'transform': Compose([Resize(84), ToTensor()])
+    }
+
+    return helper_with_default(CARS, folder, shots, ways,
+                               shuffle=shuffle, test_shots=test_shots,
+                               seed=seed, defaults=defaults, **kwargs)
