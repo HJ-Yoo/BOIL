@@ -1,6 +1,6 @@
 # BOIL: Towards Representation Change for Few-shot Learning
 
-This repository is the official implementation of "Does MAML really want feature reuse only?"
+This repository is the official implementation of "BOIL: Towards Representation Change for Few-shot Learning"
 Our implementations are relied on [Torchmeta](https://github.com/tristandeleu/pytorch-meta). 
 
 ## Requirements
